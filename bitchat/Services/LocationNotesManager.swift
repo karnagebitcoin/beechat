@@ -66,7 +66,7 @@ final class LocationNotesManager: ObservableObject {
             if let nick = nickname, !nick.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 return "\(nick)#\(suffix)"
             }
-            return "anon#\(suffix)"
+            return "bee#\(suffix)"
         }
     }
 

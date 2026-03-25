@@ -27,11 +27,23 @@ struct VoiceNoteView: View {
     }
 
     private var backgroundColor: Color {
-        colorScheme == .dark ? Color.black.opacity(0.6) : Color.white
+        BitchatTheme.secondarySurface(for: colorScheme)
     }
 
     private var borderColor: Color {
-        colorScheme == .dark ? Color.green.opacity(0.3) : Color.green.opacity(0.2)
+        BitchatTheme.border(for: colorScheme)
+    }
+
+    private var accentColor: Color {
+        BitchatTheme.accent(for: colorScheme)
+    }
+
+    private var dangerColor: Color {
+        BitchatTheme.danger(for: colorScheme)
+    }
+
+    private var shadowColor: Color {
+        BitchatTheme.shadow(for: colorScheme)
     }
 
     private var durationText: String {
@@ -60,7 +72,7 @@ struct VoiceNoteView: View {
                 Image(systemName: playback.isPlaying ? "pause.fill" : "play.fill")
                     .foregroundColor(.white)
                     .frame(width: 36, height: 36)
-                    .background(Circle().fill(Color.green))
+                    .background(Circle().fill(accentColor))
             }
             .buttonStyle(.plain)
 
@@ -76,14 +88,14 @@ struct VoiceNoteView: View {
 
             Text(playbackLabel)
                 .font(.bitchatSystem(size: 13, design: .monospaced))
-                .foregroundColor(Color.secondary)
+                .foregroundColor(BitchatTheme.secondaryText(for: colorScheme))
 
             if let onCancel = onCancel, isSending {
                 Button(action: onCancel) {
                     Image(systemName: "xmark")
                         .font(.bitchatSystem(size: 12, weight: .bold))
                         .frame(width: 28, height: 28)
-                        .background(Circle().fill(Color.red.opacity(0.9)))
+                        .background(Circle().fill(dangerColor))
                         .foregroundColor(.white)
                 }
                 .buttonStyle(.plain)
@@ -93,7 +105,7 @@ struct VoiceNoteView: View {
         .background(
             RoundedRectangle(cornerRadius: 14)
                 .fill(backgroundColor)
-                .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.3 : 0.1), radius: 6, x: 0, y: 2)
+                .shadow(color: shadowColor, radius: 6, x: 0, y: 2)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 14)

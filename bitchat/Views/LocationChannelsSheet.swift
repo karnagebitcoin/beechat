@@ -12,10 +12,73 @@ struct LocationChannelsSheet: View {
     @ObservedObject private var network = NetworkActivationService.shared
     @EnvironmentObject var viewModel: ChatViewModel
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var customGeohash: String = ""
     @State private var customError: String? = nil
 
     private var backgroundColor: Color { colorScheme == .dark ? .black : .white }
+    private var surfaceColor: Color { BitchatTheme.surface(for: colorScheme) }
+    private var elevatedSurfaceColor: Color { BitchatTheme.elevatedSurface(for: colorScheme) }
+    private var secondarySurfaceColor: Color { BitchatTheme.secondarySurface(for: colorScheme) }
+    private var textColor: Color { BitchatTheme.primaryText(for: colorScheme) }
+    private var secondaryTextColor: Color { BitchatTheme.secondaryText(for: colorScheme) }
+    private var borderColor: Color { BitchatTheme.border(for: colorScheme) }
+    private var shadowColor: Color { BitchatTheme.shadow(for: colorScheme) }
+    private var heroTitle: String { "Choose a chat" }
+    private var heroSubtitle: String { "Stay in the nearby Bluetooth chat or switch to a broader local area." }
+    private var heroPrivacyText: String { "Approximate area only" }
+    private var nearbySectionTitle: String { "Nearby areas" }
+    private var teleportSectionTitle: String { "Open a geohash" }
+    private var teleportSectionDescription: String { "Paste a code if you want to visit another area." }
+    private var settingsSectionTitle: String { "Privacy & routing" }
+    private var isCompactPhoneLayout: Bool {
+        #if os(iOS)
+        horizontalSizeClass == .compact
+        #else
+        false
+        #endif
+    }
+    private var heroCardPadding: CGFloat { isCompactPhoneLayout ? 16 : 20 }
+    private var heroIconSize: CGFloat { isCompactPhoneLayout ? 52 : 58 }
+    private var heroIconCornerRadius: CGFloat { isCompactPhoneLayout ? 18 : 20 }
+    private var heroIconFontSize: CGFloat { isCompactPhoneLayout ? 22 : 24 }
+    private var heroTitleFontSize: CGFloat { isCompactPhoneLayout ? 22 : 28 }
+    private var heroSubtitleFontSize: CGFloat { isCompactPhoneLayout ? 13 : 15 }
+    private var heroStackSpacing: CGFloat { isCompactPhoneLayout ? 12 : 14 }
+    private var heroTextSpacing: CGFloat { isCompactPhoneLayout ? 6 : 8 }
+    private var closeButtonSize: CGFloat { isCompactPhoneLayout ? 34 : 38 }
+    private var closeButtonFontSize: CGFloat { isCompactPhoneLayout ? 13 : 14 }
+    private var rowTitleFontSize: CGFloat { isCompactPhoneLayout ? 16 : 17 }
+    private var rowSubtitleFontSize: CGFloat { isCompactPhoneLayout ? 12 : 13 }
+    private var badgeFontSize: CGFloat { isCompactPhoneLayout ? 11 : 12 }
+    private var badgeHorizontalPadding: CGFloat { isCompactPhoneLayout ? 8 : 10 }
+    private var badgeVerticalPadding: CGFloat { isCompactPhoneLayout ? 5 : 6 }
+    private var sectionHeaderFontSize: CGFloat { isCompactPhoneLayout ? 12 : 13 }
+    private var sheetPadding: CGFloat { isCompactPhoneLayout ? 14 : 16 }
+
+    private var compactSettingsButton: some View {
+        Button(action: { openSystemLocationSettings() }) {
+            HStack(spacing: 7) {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: isCompactPhoneLayout ? 11 : 12, weight: .semibold))
+                Text("Settings")
+                    .font(.bitchatSystem(size: isCompactPhoneLayout ? 12 : 13, weight: .semibold))
+            }
+            .foregroundColor(textColor)
+            .padding(.horizontal, isCompactPhoneLayout ? 11 : 13)
+            .padding(.vertical, isCompactPhoneLayout ? 8 : 9)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(standardGreen.opacity(colorScheme == .dark ? 0.20 : 0.14))
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var bookmarkedSectionTitle: String {
+        String(localized: "location_channels.bookmarked_section_title", comment: "Title for bookmarked geohash channels").localizedCapitalized
+    }
+    private var meshSubtitleText: String { "Bluetooth mesh • \(bluetoothRangeString())" }
 
     private enum Strings {
         static let title: LocalizedStringKey = "location_channels.title"
@@ -95,59 +158,71 @@ struct LocationChannelsSheet: View {
     }
 
     var body: some View {
-        NavigationView {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 12) {
-                    Text(Strings.title)
-                        .font(.bitchatSystem(size: 18, design: .monospaced))
-                    Spacer()
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .top, spacing: heroStackSpacing) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .fill(standardGreen.opacity(colorScheme == .dark ? 0.18 : 0.12))
+                            .frame(width: heroIconSize, height: heroIconSize)
+
+                        Image(systemName: "location.circle.fill")
+                            .font(.bitchatSystem(size: heroIconFontSize, weight: .semibold))
+                            .foregroundColor(standardGreen)
+                    }
+                    .clipShape(
+                        RoundedRectangle(cornerRadius: heroIconCornerRadius, style: .continuous)
+                    )
+
+                    VStack(alignment: .leading, spacing: heroTextSpacing) {
+                        Text(heroTitle)
+                            .font(.bitchatSystem(size: heroTitleFontSize, weight: .bold, design: .rounded))
+                            .foregroundColor(textColor)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.85)
+                            .layoutPriority(1)
+                        Text(heroSubtitle)
+                            .font(.bitchatSystem(size: heroSubtitleFontSize))
+                            .foregroundColor(secondaryTextColor)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: 0)
                     closeButton
                 }
-                Text(Strings.description)
-                    .font(.bitchatSystem(size: 12, design: .monospaced))
-                    .foregroundColor(.secondary)
 
-                Group {
-                    switch manager.permissionState {
-                    case LocationChannelManager.PermissionState.notDetermined:
-                        Button(action: { manager.enableLocationChannels() }) {
-                            Text(Strings.requestPermissions)
-                                .font(.bitchatSystem(size: 12, design: .monospaced))
-                                .foregroundColor(standardGreen)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 6)
-                                .background(standardGreen.opacity(0.12))
-                                .cornerRadius(6)
-                        }
-                        .buttonStyle(.plain)
-                    case LocationChannelManager.PermissionState.denied, LocationChannelManager.PermissionState.restricted:
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(Strings.permissionDenied)
-                                .font(.bitchatSystem(size: 12, design: .monospaced))
-                                .foregroundColor(.secondary)
-                            Button(Strings.openSettings) { openSystemLocationSettings() }
-                            .buttonStyle(.plain)
-                        }
-                    case LocationChannelManager.PermissionState.authorized:
-                        EmptyView()
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        sheetBadge(icon: "lock.fill", text: heroPrivacyText, tint: standardGreen, filled: true)
+                        sheetBadge(icon: "globe", text: "Traffic routes over Tor", tint: secondaryTextColor)
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        sheetBadge(icon: "lock.fill", text: heroPrivacyText, tint: standardGreen, filled: true)
+                        sheetBadge(icon: "globe", text: "Traffic routes over Tor", tint: secondaryTextColor)
                     }
                 }
-
-                channelList
-                Spacer()
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(backgroundColor)
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarHidden(true)
-            #else
-            .navigationTitle("")
-            #endif
+            .padding(heroCardPadding)
+            .background(
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .fill(elevatedSurfaceColor)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .stroke(borderColor, lineWidth: 1)
+            )
+            .shadow(color: shadowColor, radius: 18, x: 0, y: 8)
+
+            permissionSection
+
+            channelList
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(.horizontal, sheetPadding)
+        .padding(.vertical, sheetPadding)
         #if os(macOS)
-        .frame(minWidth: 420, minHeight: 520)
+        .frame(minWidth: 520, idealWidth: 680, minHeight: 520, idealHeight: 720)
         #endif
         .background(backgroundColor)
         .onAppear {
@@ -173,26 +248,149 @@ struct LocationChannelsSheet: View {
     private var closeButton: some View {
         Button(action: { isPresented = false }) {
             Image(systemName: "xmark")
-                .font(.bitchatSystem(size: 13, weight: .semibold, design: .monospaced))
-                .frame(width: 32, height: 32)
+                .font(.bitchatSystem(size: closeButtonFontSize, weight: .semibold))
+                .foregroundColor(textColor)
+                .frame(width: closeButtonSize, height: closeButtonSize)
+                .background(
+                    Circle()
+                        .fill(secondarySurfaceColor)
+                )
+                .overlay(
+                    Circle()
+                        .stroke(borderColor, lineWidth: 1)
+                )
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Close")
     }
 
+    @ViewBuilder
+    private var permissionSection: some View {
+        switch manager.permissionState {
+        case LocationChannelManager.PermissionState.notDetermined:
+            VStack(alignment: .leading, spacing: 12) {
+                sectionHeader("Enable local chats")
+                Text(Strings.description)
+                    .font(.bitchatSystem(size: 14))
+                    .foregroundColor(secondaryTextColor)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(action: { manager.enableLocationChannels() }) {
+                    Text(Strings.requestPermissions)
+                        .font(.bitchatSystem(size: 14, weight: .semibold))
+                        .foregroundColor(textColor)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(standardGreen.opacity(colorScheme == .dark ? 0.20 : 0.14))
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(18)
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(elevatedSurfaceColor)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(borderColor, lineWidth: 1)
+            )
+        case LocationChannelManager.PermissionState.denied, LocationChannelManager.PermissionState.restricted:
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: 14) {
+                    ZStack {
+                        Circle()
+                            .fill(standardGreen.opacity(colorScheme == .dark ? 0.16 : 0.12))
+                            .frame(width: 42, height: 42)
+
+                        Image(systemName: "location.slash")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(standardGreen)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Location access is off")
+                            .font(.bitchatSystem(size: 16, weight: .semibold))
+                            .foregroundColor(textColor)
+                            .lineLimit(1)
+
+                        Text("Turn it on in Settings to unlock nearby chats.")
+                            .font(.bitchatSystem(size: 14))
+                            .foregroundColor(secondaryTextColor)
+                            .lineLimit(2)
+                    }
+
+                    Spacer(minLength: 12)
+
+                    compactSettingsButton
+                }
+                .padding(16)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 12) {
+                        ZStack {
+                            Circle()
+                                .fill(standardGreen.opacity(colorScheme == .dark ? 0.16 : 0.12))
+                                .frame(width: 40, height: 40)
+
+                            Image(systemName: "location.slash")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(standardGreen)
+                        }
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Location access is off")
+                                .font(.bitchatSystem(size: 16, weight: .semibold))
+                                .foregroundColor(textColor)
+
+                            Text("Turn it on in Settings to unlock nearby chats.")
+                                .font(.bitchatSystem(size: 14))
+                                .foregroundColor(secondaryTextColor)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+
+                    HStack {
+                        Spacer(minLength: 0)
+                        compactSettingsButton
+                    }
+                }
+                .padding(16)
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(elevatedSurfaceColor)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(borderColor, lineWidth: 1)
+            )
+        case LocationChannelManager.PermissionState.authorized:
+            EmptyView()
+        }
+    }
+
     private var channelList: some View {
         ScrollView {
-            LazyVStack(spacing: 0) {
-                channelRow(title: Strings.meshTitle(meshCount()), subtitlePrefix: Strings.subtitlePrefix(geohash: "bluetooth", coverage: bluetoothRangeString()), isSelected: isMeshSelected, titleColor: standardBlue, titleBold: meshCount() > 0) {
+            LazyVStack(alignment: .leading, spacing: 16) {
+                channelRow(
+                    iconName: "antenna.radiowaves.left.and.right",
+                    iconTint: standardBlue,
+                    title: Strings.meshTitle(meshCount()),
+                    subtitlePrefix: meshSubtitleText,
+                    isSelected: isMeshSelected,
+                    titleColor: textColor,
+                    titleBold: true
+                ) {
                     manager.select(ChannelID.mesh)
                     isPresented = false
                 }
-                .padding(.vertical, 6)
 
                 let nearby = manager.availableChannels.filter { $0.level != .building }
+                sectionHeader(nearbySectionTitle)
                 if !nearby.isEmpty {
                     ForEach(nearby) { channel in
-                        sectionDivider
                         let coverage = coverageString(forPrecision: channel.geohash.count)
                         let nameBase = locationName(for: channel.level)
                         let namePart = nameBase.map { formattedNamePrefix(for: channel.level) + $0 }
@@ -200,114 +398,142 @@ struct LocationChannelsSheet: View {
                         let subtitlePrefix = Strings.subtitlePrefix(geohash: channel.geohash, coverage: coverage)
                         let highlight = participantCount > 0
                         channelRow(
+                            iconName: iconName(for: channel.level),
+                            iconTint: highlight ? standardGreen : BitchatTheme.locationAccent(for: colorScheme),
                             title: Strings.levelTitle(for: channel.level, count: participantCount),
                             subtitlePrefix: subtitlePrefix,
                             subtitleName: namePart,
                             isSelected: isSelected(channel),
+                            titleColor: textColor,
                             titleBold: highlight,
                             trailingAccessory: {
                                 Button(action: { bookmarks.toggle(channel.geohash) }) {
                                     Image(systemName: bookmarks.isBookmarked(channel.geohash) ? "bookmark.fill" : "bookmark")
-                                        .font(.bitchatSystem(size: 14))
+                                        .font(.bitchatSystem(size: 14, weight: .semibold))
+                                        .foregroundColor(bookmarks.isBookmarked(channel.geohash) ? standardGreen : secondaryTextColor)
+                                        .frame(width: 34, height: 34)
+                                        .background(
+                                            Circle()
+                                                .fill(secondarySurfaceColor)
+                                        )
+                                        .overlay(
+                                            Circle()
+                                                .stroke(borderColor, lineWidth: 1)
+                                        )
                                 }
                                 .buttonStyle(.plain)
-                                .padding(.leading, 8)
                             }
                         ) {
                             manager.markTeleported(for: channel.geohash, false)
                             manager.select(ChannelID.location(channel))
                             isPresented = false
                         }
-                        .padding(.vertical, 6)
                     }
                 } else {
-                    sectionDivider
-                    HStack(spacing: 8) {
+                    HStack(spacing: 12) {
                         ProgressView()
+                            .tint(standardGreen)
                         Text(Strings.loadingNearby)
-                            .font(.bitchatSystem(size: 12, design: .monospaced))
+                            .font(.bitchatSystem(size: 14, weight: .medium))
+                            .foregroundColor(secondaryTextColor)
                     }
+                    .padding(18)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .fill(elevatedSurfaceColor)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .stroke(borderColor, lineWidth: 1)
+                    )
                 }
 
-                sectionDivider
                 customTeleportSection
-                    .padding(.vertical, 8)
 
                 let bookmarkedList = bookmarks.bookmarks
                 if !bookmarkedList.isEmpty {
-                    sectionDivider
                     bookmarkedSection(bookmarkedList)
-                        .padding(.vertical, 8)
                 }
 
                 if manager.permissionState == LocationChannelManager.PermissionState.authorized {
-                    sectionDivider
+                    sectionHeader(settingsSectionTitle)
                     torToggleSection
-                        .padding(.top, 12)
                     Button(action: {
                         openSystemLocationSettings()
                     }) {
                         Text(Strings.removeAccess)
-                            .font(.bitchatSystem(size: 12, design: .monospaced))
-                            .foregroundColor(Color(red: 0.75, green: 0.1, blue: 0.1))
+                            .font(.bitchatSystem(size: 14, weight: .semibold))
+                            .foregroundColor(BitchatTheme.danger(for: colorScheme))
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
-                            .background(Color.red.opacity(0.08))
-                            .cornerRadius(6)
+                            .padding(.vertical, 12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .fill(BitchatTheme.dangerSoft(for: colorScheme))
+                            )
                     }
                     .buttonStyle(.plain)
-                    .padding(.vertical, 8)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 6)
             .background(backgroundColor)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(backgroundColor)
     }
 
-    private var sectionDivider: some View {
-        Rectangle()
-            .fill(dividerColor)
-            .frame(height: 1)
-    }
-
-    private var dividerColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.08)
-    }
-
     private var customTeleportSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 2) {
-                Text(verbatim: "#")
-                    .font(.bitchatSystem(size: 14, design: .monospaced))
-                    .foregroundColor(.secondary)
-                TextField("geohash", text: $customGeohash)
-                    #if os(iOS)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled(true)
-                    .keyboardType(.asciiCapable)
-                    #endif
-                    .font(.bitchatSystem(size: 14, design: .monospaced))
-                    .onChange(of: customGeohash) { newValue in
-                        let allowed = Set("0123456789bcdefghjkmnpqrstuvwxyz")
-                        let filtered = newValue
-                            .lowercased()
-                            .replacingOccurrences(of: "#", with: "")
-                            .filter { allowed.contains($0) }
-                        if filtered.count > 12 {
-                            customGeohash = String(filtered.prefix(12))
-                        } else if filtered != newValue {
-                            customGeohash = filtered
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader(teleportSectionTitle)
+            Text(teleportSectionDescription)
+                .font(.bitchatSystem(size: 14))
+                .foregroundColor(secondaryTextColor)
+
+            let normalized = customGeohash
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .replacingOccurrences(of: "#", with: "")
+            let isValid = validateGeohash(normalized)
+
+            HStack(spacing: 10) {
+                HStack(spacing: 10) {
+                    Image(systemName: "number")
+                        .font(.bitchatSystem(size: 14, weight: .semibold))
+                        .foregroundColor(secondaryTextColor)
+
+                    TextField("Enter geohash", text: $customGeohash)
+                        #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                        .keyboardType(.asciiCapable)
+                        #endif
+                        .font(.bitchatSystem(size: 15, weight: .medium))
+                        .foregroundColor(textColor)
+                        .onChange(of: customGeohash) { newValue in
+                            let allowed = Set("0123456789bcdefghjkmnpqrstuvwxyz")
+                            let filtered = newValue
+                                .lowercased()
+                                .replacingOccurrences(of: "#", with: "")
+                                .filter { allowed.contains($0) }
+                            if filtered.count > 12 {
+                                customGeohash = String(filtered.prefix(12))
+                            } else if filtered != newValue {
+                                customGeohash = filtered
+                            }
                         }
-                    }
-                let normalized = customGeohash
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                    .lowercased()
-                    .replacingOccurrences(of: "#", with: "")
-                let isValid = validateGeohash(normalized)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(secondarySurfaceColor)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(borderColor, lineWidth: 1)
+                )
+
                 Button(action: {
                     let gh = normalized
                     guard isValid else { customError = Strings.invalidGeohash; return }
@@ -317,37 +543,47 @@ struct LocationChannelsSheet: View {
                     manager.select(ChannelID.location(ch))
                     isPresented = false
                 }) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "arrow.up.right")
+                            .font(.bitchatSystem(size: 13, weight: .semibold))
                         Text(Strings.teleport)
-                            .font(.bitchatSystem(size: 14, design: .monospaced))
-                        Image(systemName: "face.dashed")
-                            .font(.bitchatSystem(size: 14))
+                            .font(.bitchatSystem(size: 14, weight: .semibold))
                     }
+                    .foregroundColor(textColor)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(standardGreen.opacity(colorScheme == .dark ? 0.20 : 0.14))
+                    )
                 }
                 .buttonStyle(.plain)
-                .font(.bitchatSystem(size: 14, design: .monospaced))
-                .padding(.vertical, 6)
-                .padding(.horizontal, 10)
-                .background(Color.secondary.opacity(0.12))
-                .cornerRadius(6)
-                .opacity(isValid ? 1.0 : 0.4)
+                .opacity(isValid ? 1.0 : 0.45)
                 .disabled(!isValid)
             }
+
             if let err = customError {
                 Text(err)
-                    .font(.bitchatSystem(size: 12, design: .monospaced))
-                    .foregroundColor(.red)
+                    .font(.bitchatSystem(size: 13, weight: .medium))
+                    .foregroundColor(BitchatTheme.danger(for: colorScheme))
             }
         }
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(elevatedSurfaceColor)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(borderColor, lineWidth: 1)
+        )
     }
 
     private func bookmarkedSection(_ entries: [String]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(Strings.bookmarked)
-                .font(.bitchatSystem(size: 12, design: .monospaced))
-                .foregroundColor(.secondary)
-            LazyVStack(spacing: 0) {
-                ForEach(Array(entries.enumerated()), id: \.offset) { index, gh in
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader(bookmarkedSectionTitle)
+            LazyVStack(spacing: 12) {
+                ForEach(entries, id: \.self) { gh in
                     let level = levelForLength(gh.count)
                     let channel = GeohashChannel(level: level, geohash: gh)
                     let coverage = coverageString(forPrecision: gh.count)
@@ -355,17 +591,29 @@ struct LocationChannelsSheet: View {
                     let name = bookmarks.bookmarkNames[gh]
                     let participantCount = viewModel.geohashParticipantCount(for: gh)
                     channelRow(
+                        iconName: "bookmark.fill",
+                        iconTint: standardGreen,
                         title: Strings.bookmarkTitle(geohash: gh, count: participantCount),
                         subtitlePrefix: subtitle,
                         subtitleName: name.map { formattedNamePrefix(for: level) + $0 },
                         isSelected: isSelected(channel),
+                        titleColor: textColor,
                         trailingAccessory: {
                             Button(action: { bookmarks.toggle(gh) }) {
                                 Image(systemName: bookmarks.isBookmarked(gh) ? "bookmark.fill" : "bookmark")
-                                    .font(.bitchatSystem(size: 14))
+                                    .font(.bitchatSystem(size: 14, weight: .semibold))
+                                    .foregroundColor(bookmarks.isBookmarked(gh) ? standardGreen : secondaryTextColor)
+                                    .frame(width: 34, height: 34)
+                                    .background(
+                                        Circle()
+                                            .fill(secondarySurfaceColor)
+                                    )
+                                    .overlay(
+                                        Circle()
+                                            .stroke(borderColor, lineWidth: 1)
+                                    )
                             }
                             .buttonStyle(.plain)
-                            .padding(.leading, 8)
                         }
                     ) {
                         let inRegional = manager.availableChannels.contains { $0.geohash == gh }
@@ -377,12 +625,7 @@ struct LocationChannelsSheet: View {
                         manager.select(ChannelID.location(channel))
                         isPresented = false
                     }
-                    .padding(.vertical, 6)
                     .onAppear { bookmarks.resolveBookmarkNameIfNeeded(for: gh) }
-
-                    if index < entries.count - 1 {
-                        sectionDivider
-                    }
                 }
             }
         }
@@ -403,6 +646,8 @@ struct LocationChannelsSheet: View {
 
     @ViewBuilder
     private func channelRow(
+        iconName: String,
+        iconTint: Color,
         title: String,
         subtitlePrefix: String,
         subtitleName: String? = nil,
@@ -413,39 +658,109 @@ struct LocationChannelsSheet: View {
         @ViewBuilder trailingAccessory: () -> some View = { EmptyView() },
         action: @escaping () -> Void
     ) -> some View {
-        HStack(alignment: .center, spacing: 8) {
-            VStack(alignment: .leading) {
-                // Render title with smaller font for trailing count in parentheses
-                let parts = splitTitleAndCount(title)
-                HStack(spacing: 4) {
-                    Text(parts.base)
-                            .font(.bitchatSystem(size: 14, design: .monospaced))
-                            .fontWeight(titleBold ? .bold : .regular)
-                            .foregroundColor(titleColor ?? Color.primary)
-                        if let count = parts.countSuffix, !count.isEmpty {
-                            Text(count)
-                                .font(.bitchatSystem(size: 11, design: .monospaced))
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                let subtitleFull = Strings.subtitle(prefix: subtitlePrefix, name: subtitleName)
-                Text(subtitleFull)
-                    .font(.bitchatSystem(size: 12, design: .monospaced))
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                }
-                Spacer()
-                if isSelected {
-                    Text(verbatim: "✔︎")
-                        .font(.bitchatSystem(size: 16, design: .monospaced))
-                        .foregroundColor(standardGreen)
-                }
-                trailingAccessory()
+        let parts = splitTitleAndCount(title)
+        let subtitleFull = Strings.subtitle(prefix: subtitlePrefix, name: subtitleName)
+
+        HStack(alignment: .center, spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(iconTint.opacity(colorScheme == .dark ? 0.18 : 0.12))
+                    .frame(width: 44, height: 44)
+
+                Image(systemName: iconName)
+                    .font(.bitchatSystem(size: 18, weight: .semibold))
+                    .foregroundColor(iconTint)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 8) {
+                    Text(parts.base)
+                        .font(.bitchatSystem(size: rowTitleFontSize, weight: titleBold ? .bold : .semibold, design: .rounded))
+                        .foregroundColor(titleColor ?? textColor)
+                        .lineLimit(1)
+
+                    if let count = parts.countSuffix, !count.isEmpty {
+                        sheetBadge(text: count.trimmingCharacters(in: CharacterSet(charactersIn: "[]")), tint: titleBold ? standardGreen : secondaryTextColor)
+                    }
+                }
+
+                Text(subtitleFull)
+                    .font(.bitchatSystem(size: rowSubtitleFontSize, weight: subtitleNameBold ? .semibold : .medium))
+                    .foregroundColor(secondaryTextColor)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+            }
+
+            Spacer()
+
+            if isSelected {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.bitchatSystem(size: 20, weight: .semibold))
+                    .foregroundColor(standardGreen)
+            }
+
+            trailingAccessory()
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(elevatedSurfaceColor)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(borderColor, lineWidth: 1)
+        )
+        .shadow(color: shadowColor.opacity(isSelected ? 0.75 : 0.45), radius: 12, x: 0, y: 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
         .onTapGesture(perform: action)
+    }
+
+    private func sheetBadge(icon: String? = nil, text: String, tint: Color, filled: Bool = false) -> some View {
+        HStack(spacing: 6) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.bitchatSystem(size: badgeFontSize, weight: .semibold))
+            }
+            Text(text)
+                .font(.bitchatSystem(size: badgeFontSize, weight: .semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+        }
+        .foregroundColor(filled ? textColor : tint)
+        .padding(.horizontal, badgeHorizontalPadding)
+        .padding(.vertical, badgeVerticalPadding)
+        .background(
+            Capsule(style: .continuous)
+                .fill(filled ? tint.opacity(colorScheme == .dark ? 0.22 : 0.14) : secondarySurfaceColor)
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke((filled ? tint : borderColor).opacity(colorScheme == .dark ? 0.32 : 0.24), lineWidth: 1)
+        )
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.bitchatSystem(size: sectionHeaderFontSize, weight: .semibold))
+            .foregroundColor(secondaryTextColor)
+    }
+
+    private func iconName(for level: GeohashChannelLevel) -> String {
+        switch level {
+        case .region:
+            return "globe.americas.fill"
+        case .province:
+            return "map.fill"
+        case .city:
+            return "building.2.fill"
+        case .neighborhood:
+            return "mappin.and.ellipse"
+        case .block:
+            return "square.grid.3x3.fill"
+        case .building:
+            return "house.fill"
+        }
     }
 
     // Split a title like "#mesh [3 people]" into base and suffix "[3 people]"
@@ -497,27 +812,33 @@ extension LocationChannelsSheet {
     private var torToggleSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Toggle(isOn: torToggleBinding) {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(Strings.torTitle)
-                        .font(.bitchatSystem(size: 12, weight: .semibold, design: .monospaced))
-                        .foregroundColor(.primary)
+                        .font(.bitchatSystem(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundColor(textColor)
                     Text(Strings.torSubtitle)
-                        .font(.bitchatSystem(size: 11, design: .monospaced))
-                        .foregroundColor(.secondary)
+                        .font(.bitchatSystem(size: 13))
+                        .foregroundColor(secondaryTextColor)
                 }
             }
             .toggleStyle(IRCToggleStyle(accent: standardGreen, onLabel: Strings.toggleOn, offLabel: Strings.toggleOff))
         }
-        .padding(12)
-        .background(Color.secondary.opacity(0.12))
-        .cornerRadius(8)
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(elevatedSurfaceColor)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(borderColor, lineWidth: 1)
+        )
     }
 
     private var standardGreen: Color {
-        (colorScheme == .dark) ? Color.green : Color(red: 0, green: 0.5, blue: 0)
+        BitchatTheme.accent(for: colorScheme)
     }
     private var standardBlue: Color {
-        Color(red: 0.0, green: 0.478, blue: 1.0)
+        BitchatTheme.meshAccent(for: colorScheme)
     }
 }
 

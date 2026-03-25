@@ -5,6 +5,7 @@
 default:
     @echo "BitChat macOS Build Commands:"
     @echo "  just run     - Build and run the macOS app"
+    @echo "  just run-cli - Build and run the macOS app without Xcode"
     @echo "  just build   - Build the macOS app only"
     @echo "  just clean   - Clean build artifacts and restore original files"
     @echo "  just check   - Check prerequisites"
@@ -53,6 +54,11 @@ build: #check generate
 run: build
     @echo "Launching BitChat..."
     @find ~/Library/Developer/Xcode/DerivedData -name "bitchat.app" -path "*/Debug/*" -not -path "*/Index.noindex/*" | head -1 | xargs -I {} open "{}"
+
+# Run the macOS app via SwiftPM when Xcode is unavailable
+run-cli:
+    @echo "Launching BitChat via SwiftPM bundle wrapper..."
+    @./scripts/launch-cli-macos.sh
 
 # Clean build artifacts and restore original files
 clean: restore

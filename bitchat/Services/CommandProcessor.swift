@@ -42,6 +42,10 @@ protocol CommandContextProvider: AnyObject {
     func sendPrivateMessage(_ content: String, to peerID: PeerID)
     func clearCurrentPublicTimeline()
     func sendPublicRaw(_ content: String)
+    func startPongInvite()
+    func startPongBotMatch()
+    func startSnakeInvite()
+    func startSnakeBotMatch()
 
     // MARK: - System Messages
     func addLocalPrivateSystemMessage(_ content: String, to peerID: PeerID)
@@ -96,6 +100,34 @@ final class CommandProcessor {
             return handleBlock(args)
         case "/unblock":
             return handleUnblock(args)
+        case "/pong":
+            if inGeoPublic || inGeoDM || contextProvider?.selectedPrivateChatPeer != nil {
+                return .error(message: "pong is only available in the public mesh chat")
+            }
+            let mode = args.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if mode.isEmpty {
+                contextProvider?.startPongInvite()
+                return .handled
+            }
+            if mode == "bot" {
+                contextProvider?.startPongBotMatch()
+                return .handled
+            }
+            return .error(message: "usage: /pong or /pong bot")
+        case "/snake":
+            if inGeoPublic || inGeoDM || contextProvider?.selectedPrivateChatPeer != nil {
+                return .error(message: "snake is only available in the public mesh chat")
+            }
+            let mode = args.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if mode.isEmpty {
+                contextProvider?.startSnakeInvite()
+                return .handled
+            }
+            if mode == "bot" {
+                contextProvider?.startSnakeBotMatch()
+                return .handled
+            }
+            return .error(message: "usage: /snake or /snake bot")
         case "/fav":
             if inGeoPublic || inGeoDM { return .error(message: "favorites are only for mesh peers in #mesh") }
             return handleFavorite(args, add: true)
@@ -235,7 +267,7 @@ final class CommandProcessor {
                         geoNames.append(name)
                     } else {
                         let suffix = String(pk.suffix(4))
-                        geoNames.append("anon#\(suffix)")
+                        geoNames.append("bee#\(suffix)")
                     }
                 }
             }

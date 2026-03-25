@@ -514,7 +514,7 @@ extension ChatViewModel {
         
         // Foreground-only notifications: app must be active, and not already viewing this geohash
         #if os(iOS)
-        guard UIApplication.shared.applicationState == .active else { return }
+        guard Self.isForegroundApplicationActive else { return }
         if case .location(let ch) = activeChannel, ch.geohash == gh { return }
         #elseif os(macOS)
         guard NSApplication.shared.isActive else { return }
@@ -542,7 +542,7 @@ extension ChatViewModel {
             // Pre-populate the target geohash timeline so the triggering message appears when user opens it
             let senderSuffix = String(event.pubkey.suffix(4))
             let nick = geoNicknames[event.pubkey.lowercased()]
-            let senderName = (nick?.isEmpty == false ? nick! : "anon") + "#" + senderSuffix
+            let senderName = (nick?.isEmpty == false ? nick! : "bee") + "#" + senderSuffix
             
             // Clamp future timestamps
             let rawTs = Date(timeIntervalSince1970: TimeInterval(event.created_at))

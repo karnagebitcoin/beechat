@@ -15,11 +15,35 @@ struct FingerprintView: View {
     @Environment(\.colorScheme) var colorScheme
     
     private var textColor: Color {
-        colorScheme == .dark ? Color.green : Color(red: 0, green: 0.5, blue: 0)
+        BitchatTheme.primaryText(for: colorScheme)
     }
     
     private var backgroundColor: Color {
-        colorScheme == .dark ? Color.black : Color.white
+        BitchatTheme.appBackground(for: colorScheme)
+    }
+
+    private var accentColor: Color {
+        BitchatTheme.accent(for: colorScheme)
+    }
+
+    private var successColor: Color {
+        BitchatTheme.success(for: colorScheme)
+    }
+
+    private var dangerColor: Color {
+        BitchatTheme.danger(for: colorScheme)
+    }
+
+    private var cardColor: Color {
+        BitchatTheme.secondarySurface(for: colorScheme)
+    }
+
+    private var borderColor: Color {
+        BitchatTheme.border(for: colorScheme)
+    }
+
+    private var secondaryTextColor: Color {
+        BitchatTheme.secondaryText(for: colorScheme)
     }
 
     private enum Strings {
@@ -87,7 +111,7 @@ struct FingerprintView: View {
                     if let icon = encryptionStatus.icon {
                         Image(systemName: icon)
                             .font(.bitchatSystem(size: 20))
-                            .foregroundColor(encryptionStatus == .noiseVerified ? Color.green : textColor)
+                            .foregroundColor(encryptionStatus == .noiseVerified ? successColor : accentColor)
                     }
                     
                     VStack(alignment: .leading, spacing: 4) {
@@ -97,20 +121,26 @@ struct FingerprintView: View {
                         
                         Text(encryptionStatus.description)
                             .font(.bitchatSystem(size: 12, design: .monospaced))
-                            .foregroundColor(textColor.opacity(0.7))
+                            .foregroundColor(secondaryTextColor)
                     }
                     
                     Spacer()
                 }
                 .padding()
-                .background(Color.gray.opacity(0.1))
-                .cornerRadius(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(cardColor)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(borderColor, lineWidth: 1)
+                )
                 
                 // Their fingerprint
                 VStack(alignment: .leading, spacing: 8) {
                     Text(Strings.theirFingerprint)
                         .font(.bitchatSystem(size: 12, weight: .bold, design: .monospaced))
-                        .foregroundColor(textColor.opacity(0.7))
+                        .foregroundColor(secondaryTextColor)
                     
                     if let fingerprint = viewModel.getFingerprint(for: statusPeerID) {
                         Text(formatFingerprint(fingerprint))
@@ -121,8 +151,14 @@ struct FingerprintView: View {
                             .fixedSize(horizontal: false, vertical: true)
                             .padding()
                             .frame(maxWidth: .infinity)
-                            .background(Color.gray.opacity(0.1))
-                            .cornerRadius(8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(cardColor)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(borderColor, lineWidth: 1)
+                            )
                             .contextMenu {
                                 Button(Strings.copy) {
                                     #if os(iOS)
@@ -136,7 +172,7 @@ struct FingerprintView: View {
                     } else {
                         Text(Strings.handshakePending)
                             .font(.bitchatSystem(size: 14, design: .monospaced))
-                            .foregroundColor(Color.orange)
+                            .foregroundColor(accentColor)
                             .padding()
                     }
                 }
@@ -145,7 +181,7 @@ struct FingerprintView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(Strings.yourFingerprint)
                         .font(.bitchatSystem(size: 12, weight: .bold, design: .monospaced))
-                        .foregroundColor(textColor.opacity(0.7))
+                        .foregroundColor(secondaryTextColor)
                     
                     let myFingerprint = viewModel.getMyFingerprint()
                     Text(formatFingerprint(myFingerprint))
@@ -156,8 +192,14 @@ struct FingerprintView: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .padding()
                         .frame(maxWidth: .infinity)
-                        .background(Color.gray.opacity(0.1))
-                        .cornerRadius(8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(cardColor)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(borderColor, lineWidth: 1)
+                        )
                         .contextMenu {
                             Button(Strings.copy) {
                                 #if os(iOS)
@@ -177,7 +219,7 @@ struct FingerprintView: View {
                     VStack(spacing: 12) {
                         Text(isVerified ? Strings.verifiedBadge : Strings.notVerifiedBadge)
                             .font(.bitchatSystem(size: 14, weight: .bold, design: .monospaced))
-                            .foregroundColor(isVerified ? Color.green : Color.orange)
+                            .foregroundColor(isVerified ? successColor : accentColor)
                             .frame(maxWidth: .infinity)
                         
                         Group {
@@ -188,7 +230,7 @@ struct FingerprintView: View {
                             }
                         }
                             .font(.bitchatSystem(size: 12, design: .monospaced))
-                            .foregroundColor(textColor.opacity(0.7))
+                            .foregroundColor(secondaryTextColor)
                             .multilineTextAlignment(.center)
                             .lineLimit(nil)
                             .fixedSize(horizontal: false, vertical: true)
@@ -204,7 +246,7 @@ struct FingerprintView: View {
                                     .foregroundColor(.white)
                                     .padding(.horizontal, 20)
                                     .padding(.vertical, 10)
-                                    .background(Color.green)
+                                    .background(successColor)
                                     .cornerRadius(8)
                             }
                             .buttonStyle(PlainButtonStyle())
@@ -218,7 +260,7 @@ struct FingerprintView: View {
                                     .foregroundColor(.white)
                                     .padding(.horizontal, 20)
                                     .padding(.vertical, 10)
-                                    .background(Color.red)
+                                    .background(dangerColor)
                                     .cornerRadius(8)
                             }
                             .buttonStyle(PlainButtonStyle())

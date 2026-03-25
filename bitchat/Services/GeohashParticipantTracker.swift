@@ -24,7 +24,7 @@ public struct GeoPerson: Identifiable, Equatable, Sendable {
 /// Protocol for resolving display names and checking block status
 @MainActor
 public protocol GeohashParticipantContext: AnyObject {
-    /// Returns display name for a Nostr pubkey (e.g., "alice#a1b2" or "anon#c3d4")
+    /// Returns display name for a Nostr pubkey (e.g., "alice#a1b2" or "bee#c3d4")
     func displayNameForPubkey(_ pubkeyHex: String) -> String
     /// Returns true if the pubkey is blocked
     func isBlocked(_ pubkeyHexLowercased: String) -> Bool

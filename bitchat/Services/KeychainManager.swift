@@ -129,7 +129,7 @@ final class KeychainManager: KeychainManagerProtocol {
             kSecValueData as String: data,
             kSecAttrService as String: service,
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
-            kSecAttrLabel as String: "bitchat-\(key)"
+            kSecAttrLabel as String: "beechat-\(key)"
         ]
         #if os(macOS)
         base[kSecAttrSynchronizable as String] = false
@@ -294,7 +294,7 @@ final class KeychainManager: KeychainManagerProtocol {
             kSecValueData as String: data,
             kSecAttrService as String: service,
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
-            kSecAttrLabel as String: "bitchat-\(key)"
+            kSecAttrLabel as String: "beechat-\(key)"
         ]
         #if os(macOS)
         base[kSecAttrSynchronizable as String] = false
@@ -436,6 +436,8 @@ final class KeychainManager: KeychainManagerProtocol {
                 } else if service == self.service {
                     shouldDelete = true
                 } else if [
+                    "chat.beechat.passwords",
+                    "chat.beechat.nostr",
                     "com.bitchat.passwords",
                     "com.bitchat.deviceidentity",
                     "com.bitchat.noise.identity",
@@ -479,6 +481,8 @@ final class KeychainManager: KeychainManagerProtocol {
         // This catches any items that might have been missed above
         let knownServices = [
             self.service,  // Current service name
+            "chat.beechat.passwords",
+            "chat.beechat.nostr",
             "com.bitchat.passwords",
             "com.bitchat.deviceidentity", 
             "com.bitchat.noise.identity",

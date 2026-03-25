@@ -447,7 +447,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "$(PRODUCT_BUNDLE_IDENTIFIER).tests";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).tests";
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = "$(SWIFT_VERSION)";
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -472,7 +472,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "$(PRODUCT_BUNDLE_IDENTIFIER).tests";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).tests";
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = "$(SWIFT_VERSION)";
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -499,7 +499,7 @@
 					"@loader_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = "$(MACOSX_DEPLOYMENT_TARGET)";
-				PRODUCT_BUNDLE_IDENTIFIER = "$(PRODUCT_BUNDLE_IDENTIFIER).tests";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).tests";
 				SDKROOT = macosx;
 				SWIFT_VERSION = "$(SWIFT_VERSION)";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/bitchat.app/Contents/MacOS/bitchat";
@@ -518,7 +518,7 @@
 				CODE_SIGN_STYLE = "$(CODE_SIGN_STYLE)";
 				DEVELOPMENT_TEAM = "$(DEVELOPMENT_TEAM)";
 				INFOPLIST_FILE = bitchatShareExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = bitchat;
+				INFOPLIST_KEY_CFBundleDisplayName = beechat;
 				IPHONEOS_DEPLOYMENT_TARGET = "$(IPHONEOS_DEPLOYMENT_TARGET)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -526,7 +526,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = "$(MARKETING_VERSION)";
-				PRODUCT_BUNDLE_IDENTIFIER = "$(PRODUCT_BUNDLE_IDENTIFIER).ShareExtension";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).ShareExtension";
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -549,9 +549,10 @@
 				CODE_SIGN_ENTITLEMENTS = bitchat/bitchat.entitlements;
 				CODE_SIGN_STYLE = "$(CODE_SIGN_STYLE)";
 				DEVELOPMENT_TEAM = "$(DEVELOPMENT_TEAM)";
+				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_PREVIEWS = NO;
 				INFOPLIST_FILE = bitchat/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = bitchat;
+				INFOPLIST_KEY_CFBundleDisplayName = beechat;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
 				IPHONEOS_DEPLOYMENT_TARGET = "$(IPHONEOS_DEPLOYMENT_TARGET)";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -559,7 +560,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.5.1;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(PRODUCT_BUNDLE_IDENTIFIER)";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = bitchat;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -590,7 +591,7 @@
 					"@loader_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = "$(MACOSX_DEPLOYMENT_TARGET)";
-				PRODUCT_BUNDLE_IDENTIFIER = "$(PRODUCT_BUNDLE_IDENTIFIER).tests";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).tests";
 				SDKROOT = macosx;
 				SWIFT_VERSION = "$(SWIFT_VERSION)";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/bitchat.app/Contents/MacOS/bitchat";
@@ -611,7 +612,7 @@
 				DEVELOPMENT_TEAM = "$(DEVELOPMENT_TEAM)";
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = bitchat/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = bitchat;
+				INFOPLIST_KEY_CFBundleDisplayName = beechat;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
 				IPHONEOS_DEPLOYMENT_TARGET = "$(IPHONEOS_DEPLOYMENT_TARGET)";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -619,7 +620,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.5.1;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(PRODUCT_BUNDLE_IDENTIFIER)";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = bitchat;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -640,14 +641,14 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGNING_ALLOWED = YES;
 				CODE_SIGNING_REQUIRED = YES;
-				CODE_SIGN_ENTITLEMENTS = "bitchat/bitchat-macOS.entitlements";
+				CODE_SIGN_ENTITLEMENTS = "$(MACOS_CODE_SIGN_ENTITLEMENTS)";
 				CODE_SIGN_STYLE = "$(CODE_SIGN_STYLE)";
 				COMBINE_HIDPI_IMAGES = YES;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "$(DEVELOPMENT_TEAM)";
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = bitchat/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = bitchat;
+				INFOPLIST_KEY_CFBundleDisplayName = beechat;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -655,7 +656,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = "$(MACOSX_DEPLOYMENT_TARGET)";
 				MARKETING_VERSION = 1.5.1;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(PRODUCT_BUNDLE_IDENTIFIER)";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = bitchat;
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = macosx;
@@ -732,14 +733,15 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGNING_ALLOWED = YES;
 				CODE_SIGNING_REQUIRED = YES;
-				CODE_SIGN_ENTITLEMENTS = "bitchat/bitchat-macOS.entitlements";
+				CODE_SIGN_ENTITLEMENTS = "$(MACOS_CODE_SIGN_ENTITLEMENTS)";
 				CODE_SIGN_STYLE = "$(CODE_SIGN_STYLE)";
 				COMBINE_HIDPI_IMAGES = YES;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "$(DEVELOPMENT_TEAM)";
+				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_PREVIEWS = NO;
 				INFOPLIST_FILE = bitchat/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = bitchat;
+				INFOPLIST_KEY_CFBundleDisplayName = beechat;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -747,7 +749,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = "$(MACOSX_DEPLOYMENT_TARGET)";
 				MARKETING_VERSION = 1.5.1;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(PRODUCT_BUNDLE_IDENTIFIER)";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = bitchat;
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = macosx;
@@ -834,7 +836,7 @@
 				CODE_SIGN_STYLE = "$(CODE_SIGN_STYLE)";
 				DEVELOPMENT_TEAM = "$(DEVELOPMENT_TEAM)";
 				INFOPLIST_FILE = bitchatShareExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = bitchat;
+				INFOPLIST_KEY_CFBundleDisplayName = beechat;
 				IPHONEOS_DEPLOYMENT_TARGET = "$(IPHONEOS_DEPLOYMENT_TARGET)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -842,7 +844,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = "$(MARKETING_VERSION)";
-				PRODUCT_BUNDLE_IDENTIFIER = "$(PRODUCT_BUNDLE_IDENTIFIER).ShareExtension";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).ShareExtension";
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;

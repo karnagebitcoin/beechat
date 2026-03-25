@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct WaveformView: View {
+    @Environment(\.colorScheme) private var colorScheme
     let samples: [Float]
     let playbackProgress: Double
     let sendProgress: Double?
@@ -37,11 +38,11 @@ struct WaveformView: View {
                         let binPosition = Double(index) / Double(samples.count)
                         let color: Color
                         if binPosition <= clampedPlayback {
-                            color = Color.green
+                            color = BitchatTheme.accent(for: colorScheme)
                         } else if let send = clampedSend, binPosition <= send {
-                            color = Color.blue
+                            color = BitchatTheme.meshAccent(for: colorScheme)
                         } else {
-                            color = Color.gray.opacity(0.35)
+                            color = BitchatTheme.secondaryText(for: colorScheme).opacity(0.28)
                         }
                         context.fill(Path(rect), with: .color(color))
                     }

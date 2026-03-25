@@ -79,3 +79,8 @@ build.log
 
 # Local configs
 Local.xcconfig
+
+# Local tooling and generated app/build output
+.codex-launch/
+.tmp-icons/
+.xcode-deriveddata*/

@@ -31,9 +31,17 @@ final class BitchatMessage: Codable {
     func getCachedFormattedText(isDark: Bool, isSelf: Bool) -> AttributedString? {
         return _cachedFormattedText["\(isDark)-\(isSelf)"]
     }
+
+    func getCachedFormattedText(isDark: Bool, isSelf: Bool, paletteID: String, typographyVariant: String = "regular") -> AttributedString? {
+        _cachedFormattedText["\(isDark)-\(isSelf)-\(paletteID)-\(typographyVariant)"]
+    }
     
     func setCachedFormattedText(_ text: AttributedString, isDark: Bool, isSelf: Bool) {
         _cachedFormattedText["\(isDark)-\(isSelf)"] = text
+    }
+
+    func setCachedFormattedText(_ text: AttributedString, isDark: Bool, isSelf: Bool, paletteID: String, typographyVariant: String = "regular") {
+        _cachedFormattedText["\(isDark)-\(isSelf)-\(paletteID)-\(typographyVariant)"] = text
     }
     
     // Codable implementation
@@ -326,7 +334,10 @@ extension BitchatMessage {
     
     private static let timestampFormatter: DateFormatter = {
         let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.amSymbol = "am"
+        formatter.pmSymbol = "pm"
+        formatter.dateFormat = "h:mma"
         return formatter
     }()
     

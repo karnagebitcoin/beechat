@@ -55,12 +55,12 @@ struct PaymentChipView: View {
     let paymentType: PaymentType
     
     private var fgColor: Color {
-        colorScheme == .dark ? Color.green : Color(red: 0, green: 0.5, blue: 0)
+        BitchatTheme.primaryText(for: colorScheme)
     }
     private var bgColor: Color {
-        colorScheme == .dark ? Color.gray.opacity(0.18) : Color.gray.opacity(0.12)
+        BitchatTheme.secondarySurface(for: colorScheme)
     }
-    private var border: Color { fgColor.opacity(0.25) }
+    private var border: Color { BitchatTheme.border(for: colorScheme) }
     
     var body: some View {
         Button {
@@ -73,7 +73,7 @@ struct PaymentChipView: View {
             HStack(spacing: 6) {
                 Text(paymentType.emoji)
                 Text(paymentType.label)
-                    .font(.bitchatSystem(size: 12, weight: .semibold, design: .monospaced))
+                    .font(.bitchatSystem(size: 12, weight: .semibold, design: .rounded))
             }
             .padding(.vertical, 6)
             .padding(.horizontal, 12)
@@ -91,6 +91,7 @@ struct PaymentChipView: View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     let cashuLink = "https://example.com/cashu"
     let lightningLink = "https://example.com/lightning"
@@ -117,3 +118,4 @@ struct PaymentChipView: View {
     }
     .environment(\.colorScheme, .dark)
 }
+#endif

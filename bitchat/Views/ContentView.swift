@@ -27,6 +27,22 @@ private struct MessageDisplayItem: Identifiable {
     let message: BitchatMessage
 }
 
+private struct ChatScrollContentHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+private struct ChatScrollContentOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 // MARK: - Main Content View
 
 struct ContentView: View {
@@ -35,11 +51,15 @@ struct ContentView: View {
     @EnvironmentObject var viewModel: ChatViewModel
     @ObservedObject private var locationManager = LocationChannelManager.shared
     @ObservedObject private var bookmarks = GeohashBookmarksStore.shared
+    @AppStorage(BitchatTheme.selectedPaletteKey) private var selectedPaletteRawValue = BitchatPalette.sky.rawValue
     @State private var messageText = ""
     @FocusState private var isTextFieldFocused: Bool
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
     @State private var showSidebar = false
     @State private var showAppInfo = false
     @State private var showMessageActions = false
@@ -77,36 +97,345 @@ struct ContentView: View {
     // Window sizes for rendering (infinite scroll up)
     @State private var windowCountPublic: Int = 300
     @State private var windowCountPrivate: [PeerID: Int] = [:]
+    @State private var publicScrollViewportHeight: CGFloat = 1
+    @State private var publicScrollContentHeight: CGFloat = 1
+    @State private var publicScrollContentOffset: CGFloat = 0
+    @State private var privateScrollViewportHeight: CGFloat = 1
+    @State private var privateScrollContentHeight: CGFloat = 1
+    @State private var privateScrollContentOffset: CGFloat = 0
     
     // MARK: - Computed Properties
     
     private var backgroundColor: Color {
-        colorScheme == .dark ? Color.black : Color.white
+        BitchatTheme.surface(for: colorScheme)
+    }
+
+    private var appBackgroundColor: Color {
+        BitchatTheme.appBackground(for: colorScheme)
+    }
+
+    private var chatCanvasColor: Color {
+        colorScheme == .dark ? backgroundColor : .white
+    }
+
+    private var elevatedSurfaceColor: Color {
+        BitchatTheme.elevatedSurface(for: colorScheme)
+    }
+
+    private var secondarySurfaceColor: Color {
+        BitchatTheme.secondarySurface(for: colorScheme)
     }
 
     private var textColor: Color {
-        colorScheme == .dark ? Color.green : Color(red: 0, green: 0.5, blue: 0)
+        BitchatTheme.primaryText(for: colorScheme)
     }
 
     private var secondaryTextColor: Color {
-        colorScheme == .dark ? Color.green.opacity(0.8) : Color(red: 0, green: 0.5, blue: 0).opacity(0.8)
+        BitchatTheme.secondaryText(for: colorScheme)
+    }
+
+    private var borderColor: Color {
+        BitchatTheme.border(for: colorScheme)
+    }
+
+    private var accentColor: Color {
+        BitchatTheme.accent(for: colorScheme)
+    }
+
+    private var meshAccentColor: Color {
+        BitchatTheme.meshAccent(for: colorScheme)
+    }
+
+    private var locationAccentColor: Color {
+        BitchatTheme.locationAccent(for: colorScheme)
+    }
+
+    private var shadowColor: Color {
+        BitchatTheme.shadow(for: colorScheme)
+    }
+
+    private var messageScrollThumbColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.18) : accentColor.opacity(0.18)
+    }
+
+    private var messageScrollTrackColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.035) : accentColor.opacity(0.05)
+    }
+
+    private var usesNativeMacScroller: Bool {
+        #if os(macOS)
+        true
+        #else
+        false
+        #endif
     }
 
     private var headerLineLimit: Int? {
         dynamicTypeSize.isAccessibilitySize ? 2 : 1
     }
 
-    private var peopleSheetTitle: String {
-        String(localized: "content.header.people", comment: "Title for the people list sheet").lowercased()
+    private var usesCompactHeaderLayout: Bool {
+        #if os(iOS)
+        horizontalSizeClass == .compact && !dynamicTypeSize.isAccessibilitySize
+        #else
+        false
+        #endif
     }
 
-    private var peopleSheetSubtitle: String? {
+    private var usesCompactChatTypography: Bool {
+        #if os(iOS)
+        horizontalSizeClass == .compact && !dynamicTypeSize.isAccessibilitySize
+        #else
+        false
+        #endif
+    }
+
+    private var usesCompactPeopleSheetLayout: Bool {
+        #if os(iOS)
+        horizontalSizeClass == .compact && !dynamicTypeSize.isAccessibilitySize
+        #else
+        false
+        #endif
+    }
+
+    private var headerWordmarkSize: CGFloat {
+        usesCompactHeaderLayout ? 18 : 22
+    }
+
+    private var peopleSheetHeroSpacing: CGFloat {
+        usesCompactPeopleSheetLayout ? 12 : 14
+    }
+
+    private var peopleSheetIconContainerSize: CGFloat {
+        usesCompactPeopleSheetLayout ? 50 : 58
+    }
+
+    private var peopleSheetIconGlyphSize: CGFloat {
+        usesCompactPeopleSheetLayout ? 20 : 24
+    }
+
+    private var peopleSheetTitleFontSize: CGFloat {
+        usesCompactPeopleSheetLayout ? 22 : 26
+    }
+
+    private var peopleSheetDescriptionFontSize: CGFloat {
+        usesCompactPeopleSheetLayout ? 13.5 : 15
+    }
+
+    private var peopleSheetActionButtonSize: CGFloat {
+        usesCompactPeopleSheetLayout ? 34 : 38
+    }
+
+    private var peopleSheetActionIconSize: CGFloat {
+        usesCompactPeopleSheetLayout ? 13 : 14
+    }
+
+    private var peopleSheetActionSpacing: CGFloat {
+        usesCompactPeopleSheetLayout ? 8 : 10
+    }
+
+    private var peopleSheetHeroPadding: CGFloat {
+        usesCompactPeopleSheetLayout ? 16 : 20
+    }
+
+    private var peopleSheetBadgeFontSize: CGFloat {
+        usesCompactPeopleSheetLayout ? 12 : 13
+    }
+
+    private var peopleSheetBadgeIconSize: CGFloat {
+        usesCompactPeopleSheetLayout ? 11 : 12
+    }
+
+    private var peopleSheetBadgeHorizontalPadding: CGFloat {
+        usesCompactPeopleSheetLayout ? 10 : 12
+    }
+
+    private var peopleSheetBadgeVerticalPadding: CGFloat {
+        usesCompactPeopleSheetLayout ? 7 : 8
+    }
+
+    private var headerRowSpacing: CGFloat {
+        usesCompactHeaderLayout ? 8 : 10
+    }
+
+    private var headerCapsuleHorizontalPadding: CGFloat {
+        usesCompactHeaderLayout ? 10 : 14
+    }
+
+    private var headerCapsuleVerticalPadding: CGFloat {
+        usesCompactHeaderLayout ? 7 : 8
+    }
+
+    private var headerCountSpacing: CGFloat {
+        usesCompactHeaderLayout ? 5 : 6
+    }
+
+    private var compactHeaderPeerIconSize: CGFloat {
+        usesCompactHeaderLayout ? 10 : headerPeerIconSize
+    }
+
+    private var compactHeaderPeerCountFontSize: CGFloat {
+        usesCompactHeaderLayout ? 11 : headerPeerCountFontSize
+    }
+
+    private var headerNicknamePrefixFontSize: CGFloat {
+        usesCompactHeaderLayout ? 13 : 14
+    }
+
+    private var headerNicknameFontSize: CGFloat {
+        usesCompactHeaderLayout ? 13 : 14
+    }
+
+    private var headerNicknameMaxWidth: CGFloat {
+        usesCompactHeaderLayout ? 64 : 100
+    }
+
+    private var headerOuterHorizontalPadding: CGFloat {
+        usesCompactHeaderLayout ? 12 : 16
+    }
+
+    private var headerOuterVerticalPadding: CGFloat {
+        usesCompactHeaderLayout ? 10 : 12
+    }
+
+    private var headerBadgeFontSize: CGFloat {
+        usesCompactHeaderLayout ? 13 : 14
+    }
+
+    private var headerSpacerMinLength: CGFloat {
+        usesCompactHeaderLayout ? 6 : 10
+    }
+
+    private var peopleSheetTitle: String {
         switch locationManager.selectedChannel {
         case .mesh:
-            return "#mesh"
+            return "People nearby"
+        case .location:
+            return "People in this area"
+        }
+    }
+
+    private var peopleSheetDescription: String {
+        switch locationManager.selectedChannel {
+        case .mesh:
+            return "Start a private chat, save favorites, or verify someone nearby."
+        case .location:
+            return "See who is active here right now and tap a name to start a local direct message."
+        }
+    }
+
+    private var peopleSheetSubtitle: String {
+        switch locationManager.selectedChannel {
+        case .mesh:
+            return "Bluetooth mesh"
         case .location(let channel):
             return "#\(channel.geohash.lowercased())"
         }
+    }
+
+    private var peopleSheetAccentColor: Color {
+        switch locationManager.selectedChannel {
+        case .mesh:
+            return meshAccentColor
+        case .location:
+            return locationAccentColor
+        }
+    }
+
+    private var peopleSheetIconName: String {
+        switch locationManager.selectedChannel {
+        case .mesh:
+            return "person.2.circle.fill"
+        case .location:
+            return "mappin.circle.fill"
+        }
+    }
+
+    private var peopleSheetActiveText: String {
+        let count = peopleSheetActiveCount
+        return count == 1 ? "1 active now" : "\(count) active now"
+    }
+
+    private var currentChannelPeopleCount: Int {
+        switch locationManager.selectedChannel {
+        case .location:
+            return viewModel.visibleGeohashPeople().count
+        case .mesh:
+            return channelPeopleCountAndColor().0
+        }
+    }
+
+    private var peopleSheetActionBackground: Color {
+        colorScheme == .dark ? Color.white.opacity(0.06) : accentColor.opacity(0.08)
+    }
+
+    private var peopleSheetActionBorder: Color {
+        colorScheme == .dark ? Color.white.opacity(0.08) : accentColor.opacity(0.18)
+    }
+
+    private var peopleSheetIconBackground: Color {
+        peopleSheetAccentColor.opacity(colorScheme == .dark ? 0.18 : 0.12)
+    }
+
+    private var peopleSheetIconForeground: Color {
+        colorScheme == .dark ? peopleSheetAccentColor : peopleSheetAccentColor.opacity(0.92)
+    }
+
+    private var peopleSheetListBackground: Color {
+        colorScheme == .dark ? BitchatTheme.surface(for: colorScheme) : BitchatTheme.elevatedSurface(for: colorScheme)
+    }
+
+    private var peopleSheetListBorder: Color {
+        colorScheme == .dark ? borderColor : peopleSheetAccentColor.opacity(0.14)
+    }
+
+    @ViewBuilder
+    private func peopleSheetBadge(icon: String? = nil, text: String, tint: Color, filled: Bool = false) -> some View {
+        HStack(spacing: 6) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.bitchatSystem(size: peopleSheetBadgeIconSize, weight: .semibold))
+            }
+            Text(text)
+                .font(.bitchatSystem(size: peopleSheetBadgeFontSize, weight: .semibold))
+                .lineLimit(1)
+        }
+        .foregroundColor(filled ? BitchatTheme.primaryText(for: colorScheme) : tint)
+        .padding(.horizontal, peopleSheetBadgeHorizontalPadding)
+        .padding(.vertical, peopleSheetBadgeVerticalPadding)
+        .background(
+            Capsule(style: .continuous)
+                .fill(filled ? tint.opacity(colorScheme == .dark ? 0.22 : 0.14) : secondarySurfaceColor)
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(filled ? tint.opacity(colorScheme == .dark ? 0.28 : 0.18) : peopleSheetListBorder, lineWidth: 1)
+        )
+    }
+
+    private func peopleSheetActionButton(
+        icon: String,
+        accessibilityLabel: String,
+        helpText: String? = nil,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.bitchatSystem(size: peopleSheetActionIconSize, weight: .semibold))
+                .foregroundColor(textColor)
+                .frame(width: peopleSheetActionButtonSize, height: peopleSheetActionButtonSize)
+                .background(
+                    Circle()
+                        .fill(peopleSheetActionBackground)
+                )
+                .overlay(
+                    Circle()
+                        .stroke(peopleSheetActionBorder, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+        .help(helpText ?? accessibilityLabel)
     }
 
     private var peopleSheetActiveCount: Int {
@@ -129,40 +458,52 @@ struct ContentView: View {
 // MARK: - Body
 
     var body: some View {
-        VStack(spacing: 0) {
-            mainHeaderView
-                .onAppear {
-                    viewModel.currentColorScheme = colorScheme
-                    #if os(macOS)
-                    // Focus message input on macOS launch, not nickname field
-                    DispatchQueue.main.async {
-                        isNicknameFieldFocused = false
-                        isTextFieldFocused = true
+        ZStack {
+            BitchatTheme.backgroundGradient(for: colorScheme)
+                .ignoresSafeArea()
+
+            VStack(spacing: 14) {
+                mainHeaderView
+                    .onAppear {
+                        viewModel.currentColorScheme = colorScheme
+                        #if os(macOS)
+                        // Focus message input on macOS launch, not nickname field
+                        DispatchQueue.main.async {
+                            isNicknameFieldFocused = false
+                            isTextFieldFocused = true
+                        }
+                        #endif
                     }
-                    #endif
-                }
-                .onChange(of: colorScheme) { newValue in
-                    viewModel.currentColorScheme = newValue
+                    .onChange(of: colorScheme) { newValue in
+                        viewModel.currentColorScheme = newValue
+                    }
+
+                GeometryReader { geometry in
+                    VStack(spacing: 0) {
+                        messagesView(privatePeer: nil, isAtBottom: $isAtBottomPublic)
+                            .background(chatCanvasColor)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .background(
+                        RoundedRectangle(cornerRadius: 28, style: .continuous)
+                            .fill(chatCanvasColor)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 28, style: .continuous)
+                            .stroke(borderColor, lineWidth: 1)
+                    )
+                    .shadow(color: shadowColor, radius: 22, x: 0, y: 12)
                 }
 
-            Divider()
-
-            GeometryReader { geometry in
-                VStack(spacing: 0) {
-                    messagesView(privatePeer: nil, isAtBottom: $isAtBottomPublic)
-                        .background(backgroundColor)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if viewModel.selectedPrivateChatPeer == nil {
+                    inputView
                 }
-                .frame(width: geometry.size.width, height: geometry.size.height)
             }
-
-            Divider()
-
-            if viewModel.selectedPrivateChatPeer == nil {
-                inputView
-            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
         }
-        .background(backgroundColor)
         .foregroundColor(textColor)
         #if os(macOS)
         .frame(minWidth: 600, minHeight: 400)
@@ -200,6 +541,28 @@ struct ContentView: View {
                     .environmentObject(viewModel)
             }
         }
+#if os(iOS)
+        .fullScreenCover(item: $viewModel.activeSnakeRuntime) { runtime in
+            SnakeArenaView(runtime: runtime)
+                .interactiveDismissDisabled(true)
+        }
+#else
+        .sheet(item: $viewModel.activeSnakeRuntime) { runtime in
+            SnakeArenaView(runtime: runtime)
+                .frame(minWidth: 980, minHeight: 760)
+        }
+#endif
+#if os(iOS)
+        .fullScreenCover(item: $viewModel.activePongRuntime) { runtime in
+            PongMatchView(runtime: runtime)
+                .interactiveDismissDisabled(true)
+        }
+#else
+        .sheet(item: $viewModel.activePongRuntime) { runtime in
+            PongMatchView(runtime: runtime)
+                .frame(minWidth: 920, minHeight: 640)
+        }
+#endif
 #if os(iOS)
         // Only present image picker from main view when NOT in a sheet
         .fullScreenCover(isPresented: Binding(
@@ -376,8 +739,61 @@ struct ContentView: View {
             return MessageDisplayItem(id: "\(contextKey)|\(message.id)", message: message)
         }
 
+        let nearbyPeopleCount = privatePeer == nil ? currentChannelPeopleCount : 0
+        let shouldShowScanningPlaceholder = privatePeer == nil && messageItems.isEmpty
+        let scanningModeLabel: String = {
+            switch locationManager.selectedChannel {
+            case .mesh:
+                return "Mesh"
+            case .location(let channel):
+                return "#\(channel.geohash.lowercased())"
+            }
+        }()
+        let scanningCountLabel: String? = nearbyPeopleCount > 0 ? "\(nearbyPeopleCount) nearby" : nil
+        let scanningAccentColor: Color = {
+            switch locationManager.selectedChannel {
+            case .mesh:
+                return meshAccentColor
+            case .location:
+                return locationAccentColor
+            }
+        }()
+        let scanningTitle: String = {
+            switch locationManager.selectedChannel {
+            case .mesh:
+                if nearbyPeopleCount == 0 {
+                    return "Scanning nearby"
+                }
+                return nearbyPeopleCount == 1 ? "1 person nearby" : "\(nearbyPeopleCount) people nearby"
+            case .location(let channel):
+                if nearbyPeopleCount == 0 {
+                    return "Watching #\(channel.geohash.lowercased())"
+                }
+                return nearbyPeopleCount == 1 ? "1 person in this area" : "\(nearbyPeopleCount) people in this area"
+            }
+        }()
+        let scanningSubtitle: String = {
+            switch locationManager.selectedChannel {
+            case .mesh:
+                if nearbyPeopleCount == 0 {
+                    return "Bluetooth mesh is listening for nearby people and the first message."
+                }
+                return "Someone is around. Say hi to get the chat moving while the radar keeps scanning."
+            case .location:
+                if nearbyPeopleCount == 0 {
+                    return "This area is quiet for now. Stay open and the channel will light up when someone joins."
+                }
+                return "The room is open and people are here. Send the first message when you're ready."
+            }
+        }()
+
+        let scrollViewportHeight = privatePeer == nil ? $publicScrollViewportHeight : $privateScrollViewportHeight
+        let scrollContentHeight = privatePeer == nil ? $publicScrollContentHeight : $privateScrollContentHeight
+        let scrollContentOffset = privatePeer == nil ? $publicScrollContentOffset : $privateScrollContentOffset
+        let scrollSpaceName = privatePeer == nil ? "chat-scroll-public" : "chat-scroll-private"
+
         return ScrollViewReader { proxy in
-            ScrollView {
+            ScrollView(.vertical, showsIndicators: usesNativeMacScroller) {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(messageItems) { item in
                         let message = item.message
@@ -425,8 +841,92 @@ struct ContentView: View {
                 }
                 .transaction { tx in if viewModel.isBatchingPublic { tx.disablesAnimations = true } }
                 .padding(.vertical, 2)
+                .background {
+                    #if os(macOS)
+                    MacOverlayScrollerConfigurator(colorScheme: colorScheme)
+                        .frame(width: 0, height: 0)
+                    #endif
+                }
+                .background(
+                    GeometryReader { geometry in
+                        Color.clear
+                            .preference(key: ChatScrollContentHeightKey.self, value: geometry.size.height)
+                    }
+                )
+                .background(
+                    GeometryReader { geometry in
+                        Color.clear
+                            .preference(
+                                key: ChatScrollContentOffsetKey.self,
+                                value: geometry.frame(in: .named(scrollSpaceName)).minY
+                            )
+                    }
+                )
             }
-            .background(backgroundColor)
+            .coordinateSpace(name: scrollSpaceName)
+            .background(
+                GeometryReader { geometry in
+                    Color.clear
+                        .onAppear { scrollViewportHeight.wrappedValue = geometry.size.height }
+                        .onChange(of: geometry.size.height) { newHeight in
+                            scrollViewportHeight.wrappedValue = newHeight
+                        }
+                }
+            )
+            .onPreferenceChange(ChatScrollContentHeightKey.self) { newHeight in
+                scrollContentHeight.wrappedValue = newHeight
+            }
+            .onPreferenceChange(ChatScrollContentOffsetKey.self) { newOffset in
+                scrollContentOffset.wrappedValue = newOffset
+            }
+            .overlay {
+                if shouldShowScanningPlaceholder {
+                    ChatScanningPlaceholderView(
+                        accentColor: scanningAccentColor,
+                        surfaceColor: chatCanvasColor,
+                        textColor: textColor,
+                        secondaryTextColor: secondaryTextColor,
+                        modeLabel: scanningModeLabel,
+                        countLabel: scanningCountLabel,
+                        title: scanningTitle,
+                        subtitle: scanningSubtitle
+                    )
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 20)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+                }
+            }
+            #if !os(macOS)
+            .overlay(alignment: .trailing) {
+                GeometryReader { geometry in
+                    let trackHeight = max(geometry.size.height - 18, 0)
+                    let overflow = max(scrollContentHeight.wrappedValue - scrollViewportHeight.wrappedValue, 0)
+                    let rawThumbHeight = trackHeight * (scrollViewportHeight.wrappedValue / max(scrollContentHeight.wrappedValue, scrollViewportHeight.wrappedValue))
+                    let thumbHeight = min(trackHeight, max(32, rawThumbHeight))
+                    let progress = overflow > 0 ? min(max(-scrollContentOffset.wrappedValue / overflow, 0), 1) : 0
+                    let thumbOffset = progress * max(trackHeight - thumbHeight, 0)
+
+                    if overflow > 1, trackHeight > thumbHeight {
+                        ZStack(alignment: .topTrailing) {
+                            Capsule(style: .continuous)
+                                .fill(messageScrollTrackColor)
+                                .frame(width: 2, height: trackHeight)
+                                .padding(.top, 9)
+
+                            Capsule(style: .continuous)
+                                .fill(messageScrollThumbColor)
+                                .frame(width: 4, height: thumbHeight)
+                                .padding(.top, 9 + thumbOffset)
+                        }
+                        .padding(.trailing, 4)
+                    }
+                }
+                .allowsHitTesting(false)
+            }
+            #endif
+            .animation(.easeOut(duration: 0.25), value: shouldShowScanningPlaceholder)
+            .background(chatCanvasColor)
             .onOpenURL { handleOpenURL($0) }
             .onTapGesture(count: 3) {
                 viewModel.sendMessage("/clear")
@@ -575,7 +1075,7 @@ struct ContentView: View {
 
     @ViewBuilder
     private var inputView: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 10) {
             // @mentions autocomplete
             if viewModel.showAutocomplete && !viewModel.autocompleteSuggestions.isEmpty {
                 VStack(alignment: .leading, spacing: 0) {
@@ -595,21 +1095,24 @@ struct ContentView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .buttonStyle(.plain)
-                        .background(Color.gray.opacity(0.1))
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 2)
+                        .background(secondarySurfaceColor)
                     }
                 }
-                .background(backgroundColor)
+                .padding(6)
+                .background(elevatedSurfaceColor)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 4)
-                        .stroke(secondaryTextColor.opacity(0.3), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(borderColor, lineWidth: 1)
                 )
-                .padding(.horizontal, 12)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             }
 
             CommandSuggestionsView(
                 messageText: $messageText,
                 textColor: textColor,
-                backgroundColor: backgroundColor,
+                backgroundColor: elevatedSurfaceColor,
                 secondaryTextColor: secondaryTextColor
             )
 
@@ -618,7 +1121,7 @@ struct ContentView: View {
                 recordingIndicator
             }
 
-            HStack(alignment: .center, spacing: 4) {
+            HStack(alignment: .center, spacing: 8) {
                 TextField(
                     "",
                     text: $messageText,
@@ -628,7 +1131,7 @@ struct ContentView: View {
                     .foregroundColor(secondaryTextColor.opacity(0.6))
                 )
                 .textFieldStyle(.plain)
-                .font(.bitchatSystem(size: 15, design: .monospaced))
+                .font(.bitchatSystem(size: 15, weight: .medium))
                 .foregroundColor(textColor)
                 .focused($isTextFieldFocused)
                 .autocorrectionDisabled(true)
@@ -637,11 +1140,15 @@ struct ContentView: View {
 #endif
                 .submitLabel(.send)
                 .onSubmit { sendMessage() }
-                .padding(.vertical, 4)
-                .padding(.horizontal, 6)
+                .padding(.vertical, 12)
+                .padding(.horizontal, 14)
                 .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(colorScheme == .dark ? Color.black.opacity(0.35) : Color.white.opacity(0.7))
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(secondarySurfaceColor)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(borderColor.opacity(0.9), lineWidth: 1)
                 )
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .onChange(of: messageText) { newValue in
@@ -654,7 +1161,7 @@ struct ContentView: View {
                     }
                 }
 
-                HStack(alignment: .center, spacing: 4) {
+                HStack(alignment: .center, spacing: 8) {
                     if shouldShowMediaControls {
                         attachmentButton
                     }
@@ -663,14 +1170,41 @@ struct ContentView: View {
                 }
             }
         }
-        .padding(.horizontal, 6)
-        .padding(.top, 6)
-        .padding(.bottom, 8)
-        .background(backgroundColor.opacity(0.95))
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(elevatedSurfaceColor)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(borderColor, lineWidth: 1)
+        )
+        .shadow(color: shadowColor, radius: 18, x: 0, y: 8)
+    }
+
+    private func headerUtilityButton(
+        icon: String,
+        foregroundColor: Color,
+        backgroundColor: Color,
+        _ accessibilityLabel: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.bitchatSystem(size: usesCompactHeaderLayout ? 11 : 12, weight: .semibold))
+                .foregroundColor(foregroundColor)
+                .frame(width: usesCompactHeaderLayout ? 28 : 32, height: usesCompactHeaderLayout ? 28 : 32)
+                .background(
+                    Circle()
+                        .fill(backgroundColor)
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
     }
     
     private func handleOpenURL(_ url: URL) {
-        guard url.scheme == "bitchat" else { return }
+        guard BitchatApp.supportsURLScheme(url.scheme) else { return }
         switch url.host {
         case "user":
             let id = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
@@ -791,14 +1325,19 @@ struct ContentView: View {
     // MARK: - Sheet Content
     
     private var peopleSheetView: some View {
-        Group {
-            if viewModel.selectedPrivateChatPeer != nil {
-                privateChatSheetView
-            } else {
-                peopleListSheetView
+        ZStack {
+            BitchatTheme.backgroundGradient(for: colorScheme)
+                .ignoresSafeArea()
+
+            Group {
+                if viewModel.selectedPrivateChatPeer != nil {
+                    privateChatSheetView
+                } else {
+                    peopleListSheetView
+                }
             }
+            .padding(12)
         }
-        .background(backgroundColor)
         .foregroundColor(textColor)
         #if os(macOS)
         .frame(minWidth: 420, minHeight: 520)
@@ -857,72 +1396,124 @@ struct ContentView: View {
     // MARK: - People Sheet Views
     
     private var peopleListSheetView: some View {
-        VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 12) {
-                    Text(peopleSheetTitle)
-                        .font(.bitchatSystem(size: 18, design: .monospaced))
-                        .foregroundColor(textColor)
-                    Spacer()
-                    if case .mesh = locationManager.selectedChannel {
-                        Button(action: { showVerifySheet = true }) {
-                            Image(systemName: "qrcode")
-                                .font(.bitchatSystem(size: 14))
-                        }
-                        .buttonStyle(.plain)
-                        .help(
-                            String(localized: "content.help.verification", comment: "Help text for verification button")
-                        )
-                    }
-                    Button(action: {
-                        withAnimation(.easeInOut(duration: TransportConfig.uiAnimationMediumSeconds)) {
-                            dismiss()
-                            showSidebar = false
-                            showVerifySheet = false
-                            viewModel.endPrivateChat()
-                        }
-                    }) {
-                        Image(systemName: "xmark")
-                            .font(.bitchatSystem(size: 12, weight: .semibold, design: .monospaced))
-                            .frame(width: 32, height: 32)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Close")
-                }
-                let activeText = String.localizedStringWithFormat(
-                    String(localized: "%@ active", comment: "Count of active users in the people sheet"),
-                    "\(peopleSheetActiveCount)"
-                )
+        VStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 16) {
+                Group {
+                    if usesCompactPeopleSheetLayout {
+                        ZStack(alignment: .topTrailing) {
+                            HStack(alignment: .top, spacing: peopleSheetHeroSpacing) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                        .fill(peopleSheetIconBackground)
+                                        .frame(width: peopleSheetIconContainerSize, height: peopleSheetIconContainerSize)
 
-                if let subtitle = peopleSheetSubtitle {
-                    let subtitleColor: Color = {
-                        switch locationManager.selectedChannel {
-                        case .mesh:
-                            return Color.blue
-                        case .location:
-                            return Color.green
+                                    Image(systemName: peopleSheetIconName)
+                                        .font(.bitchatSystem(size: peopleSheetIconGlyphSize, weight: .semibold))
+                                        .foregroundColor(peopleSheetIconForeground)
+                                }
+
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(peopleSheetTitle)
+                                        .font(.bitchatSystem(size: peopleSheetTitleFontSize, weight: .bold, design: .rounded))
+                                        .foregroundColor(textColor)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.82)
+                                    Text(peopleSheetDescription)
+                                        .font(.bitchatSystem(size: peopleSheetDescriptionFontSize))
+                                        .foregroundColor(secondaryTextColor)
+                                        .lineLimit(3)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                .padding(.trailing, peopleSheetActionButtonSize * (locationManager.selectedChannel == .mesh ? 2.4 : 1.3))
+
+                                Spacer(minLength: 0)
+                            }
+
+                            HStack(spacing: peopleSheetActionSpacing) {
+                                if case .mesh = locationManager.selectedChannel {
+                                    peopleSheetActionButton(
+                                        icon: "qrcode",
+                                        accessibilityLabel: String(localized: "content.help.verification", comment: "Accessibility label for verification button"),
+                                        helpText: String(localized: "content.help.verification", comment: "Help text for verification button")
+                                    ) {
+                                        showVerifySheet = true
+                                    }
+                                }
+                                peopleSheetActionButton(icon: "xmark", accessibilityLabel: String(localized: "common.close", comment: "Accessibility label for close buttons")) {
+                                    withAnimation(.easeInOut(duration: TransportConfig.uiAnimationMediumSeconds)) {
+                                        dismiss()
+                                        showSidebar = false
+                                        showVerifySheet = false
+                                        viewModel.endPrivateChat()
+                                    }
+                                }
+                            }
                         }
-                    }()
-                    HStack(spacing: 6) {
-                        Text(subtitle)
-                            .foregroundColor(subtitleColor)
-                        Text(activeText)
-                            .foregroundColor(.secondary)
+                    } else {
+                        HStack(alignment: .top, spacing: peopleSheetHeroSpacing) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                    .fill(peopleSheetIconBackground)
+                                    .frame(width: peopleSheetIconContainerSize, height: peopleSheetIconContainerSize)
+
+                                Image(systemName: peopleSheetIconName)
+                                    .font(.bitchatSystem(size: peopleSheetIconGlyphSize, weight: .semibold))
+                                    .foregroundColor(peopleSheetIconForeground)
+                            }
+
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(peopleSheetTitle)
+                                    .font(.bitchatSystem(size: peopleSheetTitleFontSize, weight: .bold, design: .rounded))
+                                    .foregroundColor(textColor)
+                                Text(peopleSheetDescription)
+                                    .font(.bitchatSystem(size: peopleSheetDescriptionFontSize))
+                                    .foregroundColor(secondaryTextColor)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+
+                            Spacer()
+
+                            HStack(spacing: peopleSheetActionSpacing) {
+                                if case .mesh = locationManager.selectedChannel {
+                                    peopleSheetActionButton(
+                                        icon: "qrcode",
+                                        accessibilityLabel: String(localized: "content.help.verification", comment: "Accessibility label for verification button"),
+                                        helpText: String(localized: "content.help.verification", comment: "Help text for verification button")
+                                    ) {
+                                        showVerifySheet = true
+                                    }
+                                }
+                                peopleSheetActionButton(icon: "xmark", accessibilityLabel: String(localized: "common.close", comment: "Accessibility label for close buttons")) {
+                                    withAnimation(.easeInOut(duration: TransportConfig.uiAnimationMediumSeconds)) {
+                                        dismiss()
+                                        showSidebar = false
+                                        showVerifySheet = false
+                                        viewModel.endPrivateChat()
+                                    }
+                                }
+                            }
+                        }
                     }
-                    .font(.bitchatSystem(size: 12, design: .monospaced))
-                } else {
-                    Text(activeText)
-                        .font(.bitchatSystem(size: 12, design: .monospaced))
-                        .foregroundColor(.secondary)
+                }
+
+                HStack(spacing: 8) {
+                    peopleSheetBadge(text: peopleSheetSubtitle, tint: peopleSheetAccentColor, filled: true)
+                    peopleSheetBadge(icon: "person.2.fill", text: peopleSheetActiveText, tint: secondaryTextColor)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 16)
-            .padding(.bottom, 12)
-            .background(backgroundColor)
-            
+            .padding(peopleSheetHeroPadding)
+            .background(
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .fill(elevatedSurfaceColor)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .stroke(borderColor, lineWidth: 1)
+            )
+            .shadow(color: shadowColor, radius: 18, x: 0, y: 8)
+
             ScrollView {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 14) {
                     if case .location = locationManager.selectedChannel {
                         GeohashPeopleList(
                             viewModel: viewModel,
@@ -950,16 +1541,25 @@ struct ContentView: View {
                         )
                     }
                 }
-                .padding(.top, 4)
+                .padding(14)
                 .id(viewModel.allPeers.map { "\($0.peerID)-\($0.isConnected)" }.joined())
             }
+            .background(
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .fill(peopleSheetListBackground)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .stroke(peopleSheetListBorder, lineWidth: 1)
+            )
+            .shadow(color: shadowColor.opacity(0.65), radius: 16, x: 0, y: 8)
         }
     }
     
     // MARK: - View Components
 
     private var privateChatSheetView: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 14) {
             if let privatePeerID = viewModel.selectedPrivateChatPeer {
                 let headerContext = makePrivateHeaderContext(for: privatePeerID)
 
@@ -992,7 +1592,7 @@ struct ContentView: View {
                             }) {
                                 Image(systemName: isFavorite ? "star.fill" : "star")
                                     .font(.bitchatSystem(size: 14))
-                                    .foregroundColor(isFavorite ? Color.yellow : textColor)
+                                    .foregroundColor(isFavorite ? accentColor : textColor)
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel(
@@ -1020,20 +1620,32 @@ struct ContentView: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("Close")
                 }
-                .frame(height: headerHeight)
                 .padding(.horizontal, 16)
-                .padding(.top, 10)
-                .padding(.bottom, 12)
-                .background(backgroundColor)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .fill(elevatedSurfaceColor)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(borderColor, lineWidth: 1)
+                )
             }
 
             messagesView(privatePeer: viewModel.selectedPrivateChatPeer, isAtBottom: $isAtBottomPrivate)
-                .background(backgroundColor)
+                .background(chatCanvasColor)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            Divider()
+                .background(
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .fill(chatCanvasColor)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .stroke(borderColor, lineWidth: 1)
+                )
             inputView
         }
-        .background(backgroundColor)
         .foregroundColor(textColor)
         .highPriorityGesture(
             DragGesture(minimumDistance: 25, coordinateSpace: .local)
@@ -1069,7 +1681,7 @@ struct ContentView: View {
                     case .nostrAvailable:
                         Image(systemName: "globe")
                             .font(.bitchatSystem(size: 14))
-                            .foregroundColor(.purple)
+                            .foregroundColor(locationAccentColor)
                             .accessibilityLabel(String(localized: "content.accessibility.available_nostr", comment: "Accessibility label for Nostr-available peer indicator"))
                     case .offline:
                         EmptyView()
@@ -1082,7 +1694,7 @@ struct ContentView: View {
                 } else if context.isNostrAvailable {
                     Image(systemName: "globe")
                         .font(.bitchatSystem(size: 14))
-                        .foregroundColor(.purple)
+                        .foregroundColor(locationAccentColor)
                         .accessibilityLabel(String(localized: "content.accessibility.available_nostr", comment: "Accessibility label for Nostr-available peer indicator"))
                 } else if viewModel.meshService.isPeerConnected(context.headerPeerID) || viewModel.connectedPeers.contains(context.headerPeerID) {
                     Image(systemName: "dot.radiowaves.left.and.right")
@@ -1092,7 +1704,7 @@ struct ContentView: View {
                 }
 
                 Text(context.displayName)
-                    .font(.bitchatSystem(size: 16, weight: .medium, design: .monospaced))
+                    .font(.bitchatSystem(size: 16, weight: .semibold, design: .rounded))
                     .foregroundColor(textColor)
 
                 if !privatePeerID.isGeoDM {
@@ -1103,7 +1715,7 @@ struct ContentView: View {
                             .font(.bitchatSystem(size: 14))
                             .foregroundColor(encryptionStatus == .noiseVerified ? textColor :
                                              encryptionStatus == .noiseSecured ? textColor :
-                                             Color.red)
+                                             BitchatTheme.danger(for: colorScheme))
                             .accessibilityLabel(
                                 String(
                                     format: String(localized: "content.accessibility.encryption_status", comment: "Accessibility label announcing encryption status"),
@@ -1184,194 +1796,208 @@ struct ContentView: View {
         switch locationManager.selectedChannel {
         case .location:
             let n = viewModel.geohashPeople.count
-            let standardGreen = (colorScheme == .dark) ? Color.green : Color(red: 0, green: 0.5, blue: 0)
-            return (n, n > 0 ? standardGreen : Color.secondary)
+            return (n, n > 0 ? locationAccentColor : secondaryTextColor)
         case .mesh:
             let counts = viewModel.allPeers.reduce(into: (others: 0, mesh: 0)) { counts, peer in
                 guard peer.peerID != viewModel.meshService.myPeerID else { return }
                 if peer.isConnected { counts.mesh += 1; counts.others += 1 }
                 else if peer.isReachable { counts.others += 1 }
             }
-            let meshBlue = Color(hue: 0.60, saturation: 0.85, brightness: 0.82)
-            let color: Color = counts.mesh > 0 ? meshBlue : Color.secondary
+            let color: Color = counts.mesh > 0 ? meshAccentColor : secondaryTextColor
             return (counts.others, color)
         }
     }
 
     
     private var mainHeaderView: some View {
-        HStack(spacing: 0) {
-            Text(verbatim: "bitchat/")
-                .font(.bitchatSystem(size: 18, weight: .medium, design: .monospaced))
+        let cc = channelPeopleCountAndColor()
+        let headerCountColor: Color = cc.1
+        let headerOtherPeersCount = currentChannelPeopleCount
+        let badgeText: String = {
+            switch locationManager.selectedChannel {
+            case .mesh: return usesCompactHeaderLayout ? "mesh" : "#mesh"
+            case .location(let ch): return usesCompactHeaderLayout ? ch.geohash : "#\(ch.geohash)"
+            }
+        }()
+        let badgeColor: Color = {
+            switch locationManager.selectedChannel {
+            case .mesh:
+                return meshAccentColor
+            case .location:
+                return locationAccentColor
+            }
+        }()
+
+        return HStack(alignment: .center, spacing: headerRowSpacing) {
+            Text(verbatim: "beechat")
+                .font(.bitchatWordmark(size: headerWordmarkSize, weight: .bold))
+                .tracking(-0.3)
                 .foregroundColor(textColor)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+                .layoutPriority(1)
+                .contentShape(Rectangle())
                 .onTapGesture(count: 3) {
-                    // PANIC: Triple-tap to clear all data
                     viewModel.panicClearAllData()
                 }
                 .onTapGesture(count: 1) {
-                    // Single tap for app info
                     showAppInfo = true
                 }
-            
-            HStack(spacing: 0) {
-                Text(verbatim: "@")
-                    .font(.bitchatSystem(size: 14, design: .monospaced))
-                    .foregroundColor(secondaryTextColor)
-                
-                TextField("content.input.nickname_placeholder", text: $viewModel.nickname)
-                    .textFieldStyle(.plain)
-                    .font(.bitchatSystem(size: 14, design: .monospaced))
-                    .frame(maxWidth: 80)
-                    .foregroundColor(textColor)
-                    .focused($isNicknameFieldFocused)
-                    .autocorrectionDisabled(true)
-                    #if os(iOS)
-                    .textInputAutocapitalization(.never)
-                    #endif
-                    .onChange(of: isNicknameFieldFocused) { isFocused in
-                        if !isFocused {
-                            // Only validate when losing focus
-                            viewModel.validateAndSaveNickname()
-                        }
-                    }
-                    .onSubmit {
-                        viewModel.validateAndSaveNickname()
-                    }
-            }
-            
-            Spacer()
-            
-            // Channel badge + dynamic spacing + people counter
-            // Precompute header count and color outside the ViewBuilder expressions
-            let cc = channelPeopleCountAndColor()
-            let headerCountColor: Color = cc.1
-            let headerOtherPeersCount: Int = {
-                if case .location = locationManager.selectedChannel {
-                    return viewModel.visibleGeohashPeople().count
-                }
-                return cc.0
-            }()
 
-            HStack(spacing: 10) {
-                // Unread icon immediately to the left of the channel badge (independent from channel button)
-                
-                // Unread indicator (now shown on iOS and macOS)
-                if viewModel.hasAnyUnreadMessages {
-                    Button(action: { viewModel.openMostRelevantPrivateChat() }) {
-                        Image(systemName: "envelope.fill")
-                            .font(.bitchatSystem(size: 12))
-                            .foregroundColor(Color.orange)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(
-                        String(localized: "content.accessibility.open_unread_private_chat", comment: "Accessibility label for the unread private chat button")
-                    )
+            Button(action: { showLocationChannelsSheet = true }) {
+                HStack(spacing: 8) {
+                    HeaderRadarIndicatorView(tint: badgeColor)
+                        .accessibilityHidden(true)
+
+                    Text(badgeText)
+                        .font(.bitchatSystem(size: headerBadgeFontSize, weight: .semibold, design: .rounded))
+                        .foregroundColor(badgeColor)
+                        .lineLimit(headerLineLimit)
                 }
-                // Notes icon (mesh only and when location is authorized), to the left of #mesh
+                .fixedSize(horizontal: true, vertical: false)
+                .padding(.horizontal, headerCapsuleHorizontalPadding)
+                .padding(.vertical, headerCapsuleVerticalPadding)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(badgeColor.opacity(colorScheme == .dark ? 0.16 : 0.12))
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(badgeColor.opacity(colorScheme == .dark ? 0.48 : 0.26), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(
+                String(localized: "content.accessibility.location_channels", comment: "Accessibility label for the location channels button")
+            )
+
+            Button(action: {
+                withAnimation(.easeInOut(duration: TransportConfig.uiAnimationMediumSeconds)) {
+                    showSidebar.toggle()
+                }
+            }) {
+                HStack(spacing: headerCountSpacing) {
+                    Image(systemName: "person.2.fill")
+                        .font(.system(size: compactHeaderPeerIconSize, weight: .semibold))
+                        .accessibilityHidden(true)
+                    Text("\(headerOtherPeersCount)")
+                        .font(.system(size: compactHeaderPeerCountFontSize, weight: .semibold, design: .rounded))
+                        .accessibilityHidden(true)
+                }
+                .foregroundColor(headerCountColor)
+                .padding(.horizontal, headerCapsuleHorizontalPadding)
+                .padding(.vertical, headerCapsuleVerticalPadding)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(secondarySurfaceColor)
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(borderColor, lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(
+                String(
+                    format: String(localized: "content.accessibility.people_count", comment: "Accessibility label announcing number of people in header"),
+                    locale: .current,
+                    headerOtherPeersCount
+                )
+            )
+
+            Spacer(minLength: headerSpacerMinLength)
+
+            HStack(alignment: .center, spacing: usesCompactHeaderLayout ? 6 : 8) {
+                if viewModel.hasAnyUnreadMessages {
+                    headerUtilityButton(
+                        icon: "envelope.fill",
+                        foregroundColor: accentColor,
+                        backgroundColor: BitchatTheme.accentSoft(for: colorScheme),
+                        String(localized: "content.accessibility.open_unread_private_chat", comment: "Accessibility label for the unread private chat button")
+                    ) {
+                        viewModel.openMostRelevantPrivateChat()
+                    }
+                }
+
                 if case .mesh = locationManager.selectedChannel, locationManager.permissionState == .authorized {
-                    Button(action: {
-                        // Kick a one-shot refresh and show the sheet immediately.
+                    headerUtilityButton(
+                        icon: "note.text",
+                        foregroundColor: accentColor,
+                        backgroundColor: BitchatTheme.accentSoft(for: colorScheme),
+                        String(localized: "content.accessibility.location_notes", comment: "Accessibility label for location notes button")
+                    ) {
                         LocationChannelManager.shared.enableLocationChannels()
                         LocationChannelManager.shared.refreshChannels()
-                        // If we already have a block geohash, pass it; otherwise wait in the sheet.
                         notesGeohash = LocationChannelManager.shared.availableChannels.first(where: { $0.level == .building })?.geohash
                         showLocationNotes = true
-                    }) {
-                        HStack(alignment: .center, spacing: 4) {
-                            Image(systemName: "note.text")
-                                .font(.bitchatSystem(size: 12))
-                                .foregroundColor(Color.orange.opacity(0.8))
-                                .padding(.top, 1)
-                        }
-                        .fixedSize(horizontal: true, vertical: false)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(
-                        String(localized: "content.accessibility.location_notes", comment: "Accessibility label for location notes button")
-                    )
                 }
 
-                // Bookmark toggle (geochats): to the left of #geohash
                 if case .location(let ch) = locationManager.selectedChannel {
-                    Button(action: { bookmarks.toggle(ch.geohash) }) {
-                        Image(systemName: bookmarks.isBookmarked(ch.geohash) ? "bookmark.fill" : "bookmark")
-                            .font(.bitchatSystem(size: 12))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(
+                    headerUtilityButton(
+                        icon: bookmarks.isBookmarked(ch.geohash) ? "bookmark.fill" : "bookmark",
+                        foregroundColor: bookmarks.isBookmarked(ch.geohash) ? accentColor : secondaryTextColor,
+                        backgroundColor: secondarySurfaceColor,
                         String(
                             format: String(localized: "content.accessibility.toggle_bookmark", comment: "Accessibility label for toggling a geohash bookmark"),
                             locale: .current,
                             ch.geohash
                         )
-                    )
+                    ) {
+                        bookmarks.toggle(ch.geohash)
+                    }
                 }
 
-                // Location channels button '#'
-                Button(action: { showLocationChannelsSheet = true }) {
-                    let badgeText: String = {
-                        switch locationManager.selectedChannel {
-                        case .mesh: return "#mesh"
-                        case .location(let ch): return "#\(ch.geohash)"
+                HStack(spacing: 8) {
+                    Text(verbatim: "@")
+                        .font(.bitchatSystem(size: headerNicknamePrefixFontSize, weight: .semibold))
+                        .foregroundColor(accentColor)
+
+                    TextField("content.input.nickname_placeholder", text: $viewModel.nickname)
+                        .textFieldStyle(.plain)
+                        .font(.bitchatSystem(size: headerNicknameFontSize, weight: .medium))
+                        .frame(maxWidth: headerNicknameMaxWidth)
+                        .foregroundColor(textColor)
+                        .focused($isNicknameFieldFocused)
+                        .autocorrectionDisabled(true)
+                        #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        #endif
+                        .onChange(of: isNicknameFieldFocused) { isFocused in
+                            if !isFocused {
+                                viewModel.validateAndSaveNickname()
+                            }
                         }
-                    }()
-                    let badgeColor: Color = {
-                        switch locationManager.selectedChannel {
-                        case .mesh:
-                            return Color(hue: 0.60, saturation: 0.85, brightness: 0.82)
-                        case .location:
-                            return (colorScheme == .dark) ? Color.green : Color(red: 0, green: 0.5, blue: 0)
+                        .onSubmit {
+                            viewModel.validateAndSaveNickname()
                         }
-                    }()
-                    Text(badgeText)
-                        .font(.bitchatSystem(size: 14, design: .monospaced))
-                        .foregroundColor(badgeColor)
-                        .lineLimit(headerLineLimit)
-                        .fixedSize(horizontal: true, vertical: false)
-                        .layoutPriority(2)
-                        .accessibilityLabel(
-                            String(localized: "content.accessibility.location_channels", comment: "Accessibility label for the location channels button")
-                        )
                 }
-                .buttonStyle(.plain)
-                .padding(.leading, 4)
-                .padding(.trailing, 2)
-
-                HStack(spacing: 4) {
-                    // People icon with count
-                    Image(systemName: "person.2.fill")
-                        .font(.system(size: headerPeerIconSize, weight: .regular))
-                        .accessibilityLabel(
-                            String(
-                                format: String(localized: "content.accessibility.people_count", comment: "Accessibility label announcing number of people in header"),
-                                locale: .current,
-                                headerOtherPeersCount
-                            )
-                        )
-                    Text("\(headerOtherPeersCount)")
-                        .font(.system(size: headerPeerCountFontSize, weight: .regular, design: .monospaced))
-                        .accessibilityHidden(true)
-                }
-                .foregroundColor(headerCountColor)
-                .padding(.leading, 2)
-                .lineLimit(headerLineLimit)
-                .fixedSize(horizontal: true, vertical: false)
-
-                // QR moved to the PEOPLE header in the sidebar when on mesh channel
-            }
-            .layoutPriority(3)
-            .onTapGesture {
-                withAnimation(.easeInOut(duration: TransportConfig.uiAnimationMediumSeconds)) {
-                    showSidebar.toggle()
-                }
-            }
-            .sheet(isPresented: $showVerifySheet) {
-                VerificationSheetView(isPresented: $showVerifySheet)
-                    .environmentObject(viewModel)
+                .padding(.horizontal, usesCompactHeaderLayout ? 10 : 12)
+                .padding(.vertical, headerCapsuleVerticalPadding)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(secondarySurfaceColor)
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(borderColor, lineWidth: 1)
+                )
             }
         }
-        .frame(height: headerHeight)
-        .padding(.horizontal, 12)
+        .padding(.horizontal, headerOuterHorizontalPadding)
+        .padding(.vertical, headerOuterVerticalPadding)
+        .background(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(elevatedSurfaceColor)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(borderColor, lineWidth: 1)
+        )
+        .sheet(isPresented: $showVerifySheet) {
+            VerificationSheetView(isPresented: $showVerifySheet)
+                .environmentObject(viewModel)
+        }
         .sheet(isPresented: $showLocationChannelsSheet) {
             LocationChannelsSheet(isPresented: $showLocationChannelsSheet)
                 .environmentObject(viewModel)
@@ -1465,7 +2091,7 @@ struct ContentView: View {
         } message: {
             Text("content.alert.screenshot.message")
         }
-        .background(backgroundColor.opacity(0.95))
+        .background(appBackgroundColor)
     }
 
 }
@@ -1547,7 +2173,11 @@ private extension ContentView {
 
     @ViewBuilder
     private func messageRow(for message: BitchatMessage) -> some View {
-        if message.sender == "system" {
+        if let session = viewModel.snakeSession(forInviteMessageID: message.id) {
+            SnakeInviteCardView(session: session)
+        } else if let session = viewModel.pongSession(forInviteMessageID: message.id) {
+            PongInviteCardView(session: session)
+        } else if message.sender == "system" {
             systemMessageRow(message)
         } else if let media = mediaAttachment(for: message) {
             mediaMessageRow(message: message, media: media)
@@ -1561,6 +2191,16 @@ private extension ContentView {
         Text(viewModel.formatMessageAsText(message, colorScheme: colorScheme))
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(BitchatTheme.systemFill(for: colorScheme))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(borderColor.opacity(0.8), lineWidth: 1)
+            )
     }
 
     @ViewBuilder
@@ -1571,10 +2211,11 @@ private extension ContentView {
         let isAuthoredByUs = isOutgoing || (message.senderPeerID == viewModel.meshService.myPeerID)
         let shouldBlurImage = !isAuthoredByUs
         let cancelAction: (() -> Void)? = state.canCancel ? { viewModel.cancelMediaSend(messageID: message.id) } : nil
+        let bubbleFill = BitchatTheme.messageFill(for: colorScheme, isSelf: isAuthoredByUs)
 
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .center, spacing: 4) {
-                Text(viewModel.formatMessageHeader(message, colorScheme: colorScheme))
+                Text(viewModel.formatMessageHeader(message, colorScheme: colorScheme, compactPhone: usesCompactChatTypography))
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if message.isPrivate && message.sender == viewModel.nickname,
@@ -1613,6 +2254,15 @@ private extension ContentView {
                 }
             }
         }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(bubbleFill)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(borderColor.opacity(0.9), lineWidth: isAuthoredByUs ? 0 : 1)
+        )
         .padding(.vertical, 4)
     }
 
@@ -1652,24 +2302,28 @@ private extension ContentView {
     var recordingIndicator: some View {
         HStack(spacing: 12) {
             Image(systemName: "waveform.circle.fill")
-                .foregroundColor(.red)
+                .foregroundColor(accentColor)
                 .font(.bitchatSystem(size: 20))
             Text("recording \(formattedRecordingDuration())", comment: "Voice note recording duration indicator")
-                .font(.bitchatSystem(size: 13, design: .monospaced))
-                .foregroundColor(.red)
+                .font(.bitchatSystem(size: 13, weight: .semibold))
+                .foregroundColor(textColor)
             Spacer()
             Button(action: cancelVoiceRecording) {
                 Label("Cancel", systemImage: "xmark.circle")
                     .labelStyle(.iconOnly)
                     .font(.bitchatSystem(size: 18))
-                    .foregroundColor(.red)
+                    .foregroundColor(accentColor)
             }
             .buttonStyle(.plain)
         }
         .padding(10)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color.red.opacity(0.15))
+                .fill(BitchatTheme.accentSoft(for: colorScheme))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(borderColor, lineWidth: 1)
         )
     }
 
@@ -1702,16 +2356,37 @@ private extension ContentView {
     }
 
     private var composerAccentColor: Color {
-        viewModel.selectedPrivateChatPeer != nil ? Color.orange : textColor
+        accentColor
+    }
+
+    private var composerButtonIconColor: Color {
+        Color.white.opacity(0.98)
+    }
+
+    private func composerIconButton(
+        systemName: String,
+        foregroundColor: Color,
+        backgroundColor: Color,
+        iconSize: CGFloat = 16
+    ) -> some View {
+        Image(systemName: systemName)
+            .font(.bitchatSystem(size: iconSize, weight: .semibold))
+            .foregroundColor(foregroundColor)
+            .frame(width: 36, height: 36)
+            .background(
+                Circle()
+                    .fill(backgroundColor)
+            )
+            .contentShape(Circle())
     }
 
     var attachmentButton: some View {
         #if os(iOS)
-        Image(systemName: "camera.circle.fill")
-            .font(.bitchatSystem(size: 24))
-            .foregroundColor(composerAccentColor)
-            .frame(width: 36, height: 36)
-            .contentShape(Circle())
+        composerIconButton(
+            systemName: "camera.fill",
+            foregroundColor: composerButtonIconColor,
+            backgroundColor: composerAccentColor
+        )
             .onTapGesture {
                 // Tap = Photo Library
                 imagePickerSourceType = .photoLibrary
@@ -1725,10 +2400,11 @@ private extension ContentView {
             .accessibilityLabel("Tap for library, long press for camera")
         #else
         Button(action: { showMacImagePicker = true }) {
-            Image(systemName: "photo.circle.fill")
-                .font(.bitchatSystem(size: 24))
-                .foregroundColor(composerAccentColor)
-                .frame(width: 36, height: 36)
+            composerIconButton(
+                systemName: "photo.fill",
+                foregroundColor: composerButtonIconColor,
+                backgroundColor: composerAccentColor
+            )
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Choose photo")
@@ -1755,13 +2431,15 @@ private extension ContentView {
     }
 
     private var micButtonView: some View {
-        let tint = (isRecordingVoiceNote || isPreparingVoiceNote) ? Color.red : composerAccentColor
+        let tint = (isRecordingVoiceNote || isPreparingVoiceNote)
+            ? BitchatTheme.danger(for: colorScheme)
+            : composerAccentColor
 
-        return Image(systemName: "mic.circle.fill")
-            .font(.bitchatSystem(size: 24))
-            .foregroundColor(tint)
-            .frame(width: 36, height: 36)
-            .contentShape(Circle())
+        return composerIconButton(
+            systemName: "mic.fill",
+            foregroundColor: (isRecordingVoiceNote || isPreparingVoiceNote) ? Color.white.opacity(0.98) : composerButtonIconColor,
+            backgroundColor: tint
+        )
             .overlay(
                 Color.clear
                     .contentShape(Circle())
@@ -1777,10 +2455,12 @@ private extension ContentView {
     private func sendButtonView(enabled: Bool) -> some View {
         let activeColor = composerAccentColor
         return Button(action: sendMessage) {
-            Image(systemName: "arrow.up.circle.fill")
-                .font(.bitchatSystem(size: 24))
-                .foregroundColor(enabled ? activeColor : Color.gray)
-                .frame(width: 36, height: 36)
+            composerIconButton(
+                systemName: "arrow.up",
+                foregroundColor: enabled ? composerButtonIconColor : secondaryTextColor.opacity(0.78),
+                backgroundColor: enabled ? activeColor : secondarySurfaceColor,
+                iconSize: 15
+            )
         }
         .buttonStyle(.plain)
         .disabled(!enabled)
@@ -1987,7 +2667,7 @@ struct ImagePreviewView: View {
                             .foregroundColor(.white)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 8)
-                            .background(RoundedRectangle(cornerRadius: 12).fill(Color.blue.opacity(0.6)))
+                            .background(RoundedRectangle(cornerRadius: 12).fill(BitchatTheme.accent(for: .dark).opacity(0.82)))
                     }
                 }
                 .padding([.horizontal, .bottom], 24)
@@ -2102,36 +2782,119 @@ struct ImagePickerView: UIViewControllerRepresentable {
 // MARK: - macOS Image Picker
 struct MacImagePickerView: View {
     let completion: (URL?) -> Void
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var surfaceColor: Color { BitchatTheme.elevatedSurface(for: colorScheme) }
+    private var cardColor: Color { BitchatTheme.secondarySurface(for: colorScheme) }
+    private var borderColor: Color { BitchatTheme.border(for: colorScheme) }
+    private var shadowColor: Color { BitchatTheme.shadow(for: colorScheme) }
+    private var accentColor: Color { BitchatTheme.accent(for: colorScheme) }
+    private var accentSoftColor: Color { BitchatTheme.accentSoft(for: colorScheme) }
+    private var textColor: Color { BitchatTheme.primaryText(for: colorScheme) }
+    private var secondaryTextColor: Color { BitchatTheme.secondaryText(for: colorScheme) }
 
     var body: some View {
-        VStack(spacing: 16) {
-            Text("Choose an image")
-                .font(.headline)
+        VStack(alignment: .leading, spacing: 22) {
+            HStack(alignment: .center, spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(accentSoftColor)
+                        .frame(width: 56, height: 56)
 
-            Button("Select Image") {
-                let panel = NSOpenPanel()
-                panel.allowsMultipleSelection = false
-                panel.canChooseDirectories = false
-                panel.canChooseFiles = true
-                panel.allowedContentTypes = [.image, .png, .jpeg, .heic]
-                panel.message = "Choose an image to send"
-
-                if panel.runModal() == .OK {
-                    completion(panel.url)
-                } else {
-                    dismiss()
+                    Image(systemName: "photo.on.rectangle.angled")
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundColor(accentColor)
                 }
-            }
-            .buttonStyle(.borderedProminent)
 
-            Button("Cancel") {
-                completion(nil)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Choose an image")
+                        .font(.bitchatSystem(size: 27, weight: .bold, design: .rounded))
+                        .foregroundColor(textColor)
+
+                    Text("Pick a photo to share with this chat.")
+                        .font(.bitchatSystem(size: 15, weight: .medium))
+                        .foregroundColor(secondaryTextColor)
+                }
+
+                Spacer(minLength: 0)
             }
-            .buttonStyle(.bordered)
+
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: "sparkles.tv")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(accentColor)
+
+                Text("PNG, JPEG, and HEIC images are supported.")
+                    .font(.bitchatSystem(size: 14, weight: .medium))
+                    .foregroundColor(secondaryTextColor)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(cardColor)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(borderColor, lineWidth: 1)
+            )
+
+            HStack(spacing: 12) {
+                Button(action: { completion(nil) }) {
+                    Text("Cancel")
+                        .font(.bitchatSystem(size: 15, weight: .semibold))
+                        .foregroundColor(textColor)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(cardColor)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(borderColor, lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.cancelAction)
+
+                Button(action: openImagePanel) {
+                    Label("Select Image", systemImage: "photo")
+                        .font(.bitchatSystem(size: 15, weight: .semibold))
+                        .foregroundColor(colorScheme == .dark ? .black : .white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(accentColor)
+                        )
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.defaultAction)
+            }
         }
-        .padding(40)
-        .frame(minWidth: 300, minHeight: 150)
+        .padding(28)
+        .frame(width: 460)
+        .background(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(surfaceColor)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(borderColor, lineWidth: 1)
+        )
+        .shadow(color: shadowColor, radius: 18, x: 0, y: 10)
+        .padding(20)
+    }
+
+    private func openImagePanel() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowedContentTypes = [.image, .png, .jpeg, .heic]
+        panel.message = "Choose an image to send"
+        completion(panel.runModal() == .OK ? panel.url : nil)
     }
 }
 #endif

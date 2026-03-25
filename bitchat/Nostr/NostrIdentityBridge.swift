@@ -3,7 +3,8 @@ import CryptoKit
 
 /// Bridge between Noise and Nostr identities
 final class NostrIdentityBridge {
-    private let keychainService = "chat.bitchat.nostr"
+    private let keychainService = "chat.beechat.nostr"
+    private let legacyKeychainServices = ["chat.bitchat.nostr"]
     private let currentIdentityKey = "nostr-current-identity"
     private let deviceSeedKey = "nostr-device-seed"
     // In-memory cache to avoid transient keychain access issues
@@ -17,11 +18,24 @@ final class NostrIdentityBridge {
     init(keychain: KeychainManagerProtocol = KeychainManager()) {
         self.keychain = keychain
     }
+
+    private func loadFromAnyService(key: String) -> Data? {
+        if let current = keychain.load(key: key, service: keychainService) {
+            return current
+        }
+        for legacyService in legacyKeychainServices {
+            if let legacy = keychain.load(key: key, service: legacyService) {
+                keychain.save(key: key, data: legacy, service: keychainService, accessible: nil)
+                return legacy
+            }
+        }
+        return nil
+    }
     
     /// Get or create the current Nostr identity
     func getCurrentNostrIdentity() throws -> NostrIdentity? {
         // Check if we already have a Nostr identity
-        if let existingData = keychain.load(key: currentIdentityKey, service: keychainService),
+        if let existingData = loadFromAnyService(key: currentIdentityKey),
            let identity = try? JSONDecoder().decode(NostrIdentity.self, from: existingData) {
             return identity
         }
@@ -47,7 +61,7 @@ final class NostrIdentityBridge {
     /// Get Nostr public key associated with a Noise public key
     func getNostrPublicKey(for noisePublicKey: Data) -> String? {
         let key = "nostr-noise-\(noisePublicKey.base64EncodedString())"
-        guard let data = keychain.load(key: key, service: keychainService),
+        guard let data = loadFromAnyService(key: key),
               let pubkey = String(data: data, encoding: .utf8) else {
             return nil
         }
@@ -56,28 +70,30 @@ final class NostrIdentityBridge {
     
     /// Clear all Nostr identity associations and current identity
     func clearAllAssociations() {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecMatchLimit as String: kSecMatchLimitAll,
-            kSecReturnAttributes as String: true
-        ]
+        for serviceName in [keychainService] + legacyKeychainServices {
+            let query: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: serviceName,
+                kSecMatchLimit as String: kSecMatchLimitAll,
+                kSecReturnAttributes as String: true
+            ]
 
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        if status == errSecSuccess, let items = result as? [[String: Any]] {
-            for item in items {
-                var deleteQuery: [String: Any] = [
-                    kSecClass as String: kSecClassGenericPassword,
-                    kSecAttrService as String: keychainService
-                ]
-                if let account = item[kSecAttrAccount as String] as? String {
-                    deleteQuery[kSecAttrAccount as String] = account
+            var result: AnyObject?
+            let status = SecItemCopyMatching(query as CFDictionary, &result)
+            if status == errSecSuccess, let items = result as? [[String: Any]] {
+                for item in items {
+                    var deleteQuery: [String: Any] = [
+                        kSecClass as String: kSecClassGenericPassword,
+                        kSecAttrService as String: serviceName
+                    ]
+                    if let account = item[kSecAttrAccount as String] as? String {
+                        deleteQuery[kSecAttrAccount as String] = account
+                    }
+                    SecItemDelete(deleteQuery as CFDictionary)
                 }
-                SecItemDelete(deleteQuery as CFDictionary)
+            } else if status == errSecItemNotFound {
+                // nothing persisted for this service; no action needed
             }
-        } else if status == errSecItemNotFound {
-            // nothing persisted; no action needed
         }
 
         deviceSeedCache = nil
@@ -89,7 +105,7 @@ final class NostrIdentityBridge {
     /// Stored only on device keychain.
     private func getOrCreateDeviceSeed() -> Data {
         if let cached = deviceSeedCache { return cached }
-        if let existing = keychain.load(key: deviceSeedKey, service: keychainService) {
+        if let existing = loadFromAnyService(key: deviceSeedKey) {
             // Migrate to AfterFirstUnlockThisDeviceOnly for stability during lock
             keychain.save(key: deviceSeedKey, data: existing, service: keychainService, accessible: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly)
             deviceSeedCache = existing

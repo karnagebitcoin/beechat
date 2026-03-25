@@ -15,7 +15,7 @@ final class AutocompleteService {
     
     private let commands = [
         "/msg", "/who", "/clear",
-        "/hug", "/slap", "/fav", "/unfav",
+        "/hug", "/slap", "/pong", "/snake", "/fav", "/unfav",
         "/block", "/unblock"
     ]
     
@@ -95,7 +95,7 @@ final class AutocompleteService {
     
     private func needsArgument(command: String) -> Bool {
         switch command {
-        case "/who", "/clear":
+        case "/who", "/clear", "/pong", "/snake":
             return false
         default:
             return true

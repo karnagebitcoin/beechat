@@ -34,11 +34,13 @@ let package = Package(
                 "Assets.xcassets",
                 "bitchat.entitlements",
                 "bitchat-macOS.entitlements",
+                "bitchat-macOS-local.entitlements",
                 "LaunchScreen.storyboard",
                 "ViewModels/Extensions/README.md"
             ],
             resources: [
-                .process("Localizable.xcstrings")
+                .process("Localizable.xcstrings"),
+                .process("Fonts")
             ]
         ),
         .testTarget(

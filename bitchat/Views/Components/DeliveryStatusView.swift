@@ -15,11 +15,11 @@ struct DeliveryStatusView: View {
     // MARK: - Computed Properties
     
     private var textColor: Color {
-        colorScheme == .dark ? Color.green : Color(red: 0, green: 0.5, blue: 0)
+        BitchatTheme.primaryText(for: colorScheme)
     }
     
     private var secondaryTextColor: Color {
-        colorScheme == .dark ? Color.green.opacity(0.8) : Color(red: 0, green: 0.5, blue: 0).opacity(0.8)
+        BitchatTheme.secondaryText(for: colorScheme)
     }
 
     private enum Strings {
@@ -88,13 +88,13 @@ struct DeliveryStatusView: View {
                 Image(systemName: "checkmark")
                     .font(.bitchatSystem(size: 10, weight: .bold))
             }
-            .foregroundColor(Color(red: 0.0, green: 0.478, blue: 1.0))  // Bright blue
+            .foregroundColor(BitchatTheme.accent(for: colorScheme))
             .help(Strings.read(by: nickname))
             
         case .failed(let reason):
             Image(systemName: "exclamationmark.triangle")
                 .font(.bitchatSystem(size: 10))
-                .foregroundColor(Color.red.opacity(0.8))
+                .foregroundColor(BitchatTheme.danger(for: colorScheme))
                 .help(Strings.failed(reason))
             
         case .partiallyDelivered(let reached, let total):
@@ -110,6 +110,7 @@ struct DeliveryStatusView: View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     let statuses: [DeliveryStatus] = [
         .sending,
@@ -142,3 +143,4 @@ struct DeliveryStatusView: View {
     }
     .environment(\.colorScheme, .dark)
 }
+#endif

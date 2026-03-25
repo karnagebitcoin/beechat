@@ -2,4 +2,12 @@
 DEVELOPMENT_TEAM = ABC123
 
 // Unique bundle id to be able to register and run locally
-PRODUCT_BUNDLE_IDENTIFIER = chat.bitchat.$(DEVELOPMENT_TEAM)
+APP_BUNDLE_IDENTIFIER = chat.beechat.$(DEVELOPMENT_TEAM)
+PRODUCT_BUNDLE_IDENTIFIER = $(APP_BUNDLE_IDENTIFIER)
+APP_GROUP_IDENTIFIER = group.$(APP_BUNDLE_IDENTIFIER)
+
+// Let the macOS debug app run locally without provisioning.
+CODE_SIGN_STYLE[sdk=macosx*] = Manual
+CODE_SIGN_IDENTITY[sdk=macosx*] = -
+PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*] =
+MACOS_CODE_SIGN_ENTITLEMENTS[sdk=macosx*] = bitchat/bitchat-macOS-local.entitlements

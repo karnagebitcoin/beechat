@@ -24,8 +24,9 @@ final class FavoritesPersistenceService: ObservableObject {
     
     // We intentionally do not track when we last sent our npub; sending happens only on favorite toggle.
 
-    private static let storageKey = "chat.bitchat.favorites"
-    private static let keychainService = "chat.bitchat.favorites"
+    private static let storageKey = "chat.beechat.favorites"
+    private static let keychainService = "chat.beechat.favorites"
+    private static let legacyServices = ["chat.bitchat.favorites"]
     private let keychain: KeychainManagerProtocol
     
     @Published private(set) var favorites: [Data: FavoriteRelationship] = [:] // Noise pubkey -> relationship
@@ -195,10 +196,10 @@ final class FavoritesPersistenceService: ObservableObject {
         saveFavorites()
         
         // Delete from keychain directly
-        keychain.delete(
-            key: Self.storageKey,
-            service: Self.keychainService
-        )
+        keychain.delete(key: Self.storageKey, service: Self.keychainService)
+        for legacyService in Self.legacyServices {
+            keychain.delete(key: Self.storageKey, service: legacyService)
+        }
         
         // Post notification for UI update
         NotificationCenter.default.post(name: .favoriteStatusChanged, object: nil)
@@ -231,10 +232,18 @@ final class FavoritesPersistenceService: ObservableObject {
     private func loadFavorites() {
         // Loading favorites from keychain
         
-        guard let data = keychain.load(
-            key: Self.storageKey,
-            service: Self.keychainService
-        ) else { 
+        var loadedData = keychain.load(key: Self.storageKey, service: Self.keychainService)
+        if loadedData == nil {
+            for legacyService in Self.legacyServices {
+                if let legacyData = keychain.load(key: Self.storageKey, service: legacyService) {
+                    keychain.save(key: Self.storageKey, data: legacyData, service: Self.keychainService, accessible: nil)
+                    loadedData = legacyData
+                    break
+                }
+            }
+        }
+
+        guard let data = loadedData else {
             return 
         }
         

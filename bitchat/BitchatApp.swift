@@ -12,8 +12,15 @@ import UserNotifications
 
 @main
 struct BitchatApp: App {
-    static let bundleID = Bundle.main.bundleIdentifier ?? "chat.bitchat"
+    static let bundleID = Bundle.main.bundleIdentifier ?? "chat.beechat"
     static let groupID = "group.\(bundleID)"
+    static let primaryURLScheme = "beechat"
+    static let legacyURLSchemes: Set<String> = ["bitchat"]
+
+    static func supportsURLScheme(_ scheme: String?) -> Bool {
+        guard let scheme else { return false }
+        return scheme == primaryURLScheme || legacyURLSchemes.contains(scheme)
+    }
     
     @StateObject private var chatViewModel: ChatViewModel
     #if os(iOS)
@@ -38,8 +45,7 @@ struct BitchatApp: App {
                 identityManager: SecureIdentityStateManager(keychain)
             )
         )
-        
-        UNUserNotificationCenter.current().delegate = NotificationDelegate.shared
+
         // Warm up georelay directory and refresh if stale (once/day)
         GeoRelayDirectory.shared.prefetchIfNeeded()
     }
@@ -137,7 +143,7 @@ struct BitchatApp: App {
     }
     
     private func handleURL(_ url: URL) {
-        if url.scheme == "bitchat" && url.host == "share" {
+        if BitchatApp.supportsURLScheme(url.scheme) && url.host == "share" {
             // Handle shared content
             checkForSharedContent()
         }
@@ -190,7 +196,16 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     weak var chatViewModel: ChatViewModel?
     
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
+        #if targetEnvironment(simulator)
         return true
+        #else
+        DispatchQueue.main.async {
+            guard NotificationService.shared.isNotificationCenterAvailable else { return }
+            UNUserNotificationCenter.current().delegate = NotificationDelegate.shared
+            NotificationService.shared.requestAuthorization()
+        }
+        return true
+        #endif
     }
     
     func applicationWillTerminate(_ application: UIApplication) {
@@ -204,6 +219,14 @@ import AppKit
 
 final class MacAppDelegate: NSObject, NSApplicationDelegate {
     weak var chatViewModel: ChatViewModel?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        DispatchQueue.main.async {
+            guard NotificationService.shared.isNotificationCenterAvailable else { return }
+            UNUserNotificationCenter.current().delegate = NotificationDelegate.shared
+            NotificationService.shared.requestAuthorization()
+        }
+    }
     
     func applicationWillTerminate(_ notification: Notification) {
         chatViewModel?.applicationWillTerminate()
@@ -278,4 +301,3 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
         completionHandler([.banner, .sound])
     }
 }
-

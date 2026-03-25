@@ -27,22 +27,31 @@ struct CommandSuggestionsView: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(filteredCommands) { command in
-                Button {
-                    messageText = command.alias + " "
-                } label: {
-                    buttonRow(for: command)
+        Group {
+            if filteredCommands.isEmpty {
+                EmptyView()
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(filteredCommands) { command in
+                        Button {
+                            messageText = command.alias + " "
+                        } label: {
+                            buttonRow(for: command)
+                        }
+                        .buttonStyle(.plain)
+                        .background(secondaryTextColor.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
                 }
-                .buttonStyle(.plain)
-                .background(Color.gray.opacity(0.1))
+                .padding(6)
+                .background(backgroundColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(secondaryTextColor.opacity(0.22), lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             }
         }
-        .background(backgroundColor)
-        .overlay(
-            RoundedRectangle(cornerRadius: 4)
-                .stroke(secondaryTextColor.opacity(0.3), lineWidth: 1)
-        )
     }
     
     private func buttonRow(for command: CommandInfo) -> some View {
@@ -65,11 +74,12 @@ struct CommandSuggestionsView: View {
                 .foregroundColor(secondaryTextColor)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 3)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
+#if canImport(PreviewsMacros)
 @available(iOS 17, macOS 14, *)
 #Preview {
     @Previewable @State var messageText: String = "/"
@@ -88,3 +98,4 @@ struct CommandSuggestionsView: View {
     )
     .environmentObject(viewModel)
 }
+#endif

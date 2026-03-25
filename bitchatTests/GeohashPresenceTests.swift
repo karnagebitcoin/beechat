@@ -558,7 +558,7 @@ private final class PresenceTestParticipantContext: GeohashParticipantContext {
         if let nick = nicknameMap[pubkeyHex.lowercased()] {
             return "\(nick)#\(suffix)"
         }
-        return "anon#\(suffix)"
+        return "bee#\(suffix)"
     }
 
     func isBlocked(_ pubkeyHexLowercased: String) -> Bool {

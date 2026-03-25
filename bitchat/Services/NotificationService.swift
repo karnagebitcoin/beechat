@@ -16,6 +16,21 @@ import AppKit
 
 final class NotificationService {
     static let shared = NotificationService()
+    
+    private var didRequestAuthorization = false
+    
+    var isNotificationCenterAvailable: Bool {
+        let bundle = Bundle.main
+        let env = ProcessInfo.processInfo.environment
+
+        #if os(iOS)
+        if env["SIMULATOR_DEVICE_NAME"] != nil || env["SIMULATOR_ROOT"] != nil {
+            return false
+        }
+        #endif
+
+        return bundle.bundleIdentifier != nil && bundle.bundleURL.pathExtension == "app"
+    }
 
     /// Returns true if running in test environment (XCTest, Swift Testing, or CI)
     private var isRunningTests: Bool {
@@ -29,8 +44,21 @@ final class NotificationService {
 
     private init() {}
 
-    func requestAuthorization() {
+    func requestAuthorization(retryCount: Int = 8) {
         guard !isRunningTests else { return }
+        guard !didRequestAuthorization else { return }
+        
+        // Under Xcode's debugger launch path, SwiftUI can construct app state before the
+        // process has a real app bundle URL. Touching UNUserNotificationCenter there asserts.
+        guard isNotificationCenterAvailable else {
+            guard retryCount > 0 else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                self?.requestAuthorization(retryCount: retryCount - 1)
+            }
+            return
+        }
+        
+        didRequestAuthorization = true
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
             if granted {
                 // Permission granted
@@ -48,6 +76,7 @@ final class NotificationService {
         interruptionLevel: UNNotificationInterruptionLevel = .active
     ) {
         guard !isRunningTests else { return }
+        guard isNotificationCenterAvailable else { return }
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
@@ -88,13 +117,13 @@ final class NotificationService {
     func sendGeohashActivityNotification(geohash: String, titlePrefix: String = "#", bodyPreview: String) {
         let title = "\(titlePrefix)\(geohash)"
         let identifier = "geo-activity-\(geohash)-\(Date().timeIntervalSince1970)"
-        let deeplink = "bitchat://geohash/\(geohash)"
+        let deeplink = "\(BitchatApp.primaryURLScheme)://geohash/\(geohash)"
         let userInfo: [String: Any] = ["deeplink": deeplink]
         sendLocalNotification(title: title, body: bodyPreview, identifier: identifier, userInfo: userInfo)
     }
 
     func sendNetworkAvailableNotification(peerCount: Int) {
-        let title = "👥 bitchatters nearby!"
+        let title = "👥 people nearby!"
         let body = peerCount == 1 ? "1 person around" : "\(peerCount) people around"
         // Fixed identifier so iOS updates the existing notification instead of creating new ones
         let identifier = "network-available"

@@ -11,7 +11,22 @@ import AppKit
 struct MyQRView: View {
     let qrString: String
     @Environment(\.colorScheme) var colorScheme
-    private var boxColor: Color { Color.gray.opacity(0.1) }
+    @State private var showDetails = false
+    @State private var didCopyCode = false
+
+    private var panelColor: Color { BitchatTheme.elevatedSurface(for: colorScheme) }
+    private var stageColor: Color { BitchatTheme.secondarySurface(for: colorScheme) }
+    private var borderColor: Color { BitchatTheme.border(for: colorScheme) }
+    private var accentColor: Color { BitchatTheme.accent(for: colorScheme) }
+    private var textColor: Color { BitchatTheme.primaryText(for: colorScheme) }
+    private var secondaryTextColor: Color { BitchatTheme.secondaryText(for: colorScheme) }
+    private var shadowColor: Color { BitchatTheme.shadow(for: colorScheme) }
+
+    #if os(iOS)
+    private var qrSize: CGFloat { 216 }
+    #else
+    private var qrSize: CGFloat { 232 }
+    #endif
 
     private enum Strings {
         static let title: LocalizedStringKey = "verification.my_qr.title"
@@ -19,30 +34,135 @@ struct MyQRView: View {
     }
 
     var body: some View {
-        VStack(spacing: 12) {
-            Text(Strings.title)
-                .font(.bitchatSystem(size: 16, weight: .bold, design: .monospaced))
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(Strings.title)
+                    .font(.bitchatSystem(size: 20, weight: .bold, design: .rounded))
+                    .foregroundColor(textColor)
 
-            VStack(spacing: 10) {
-                QRCodeImage(data: qrString, size: 240)
-                    .accessibilityLabel(Strings.accessibilityLabel)
-
-                // Non-scrolling, fully visible URL (wraps across lines)
-                Text(qrString)
-                    .font(.bitchatSystem(size: 11, design: .monospaced))
-                    .textSelection(.enabled)
-                    .multilineTextAlignment(.leading)
+                Text("Let someone nearby scan this code to confirm they're really chatting with you.")
+                    .font(.bitchatSystem(size: 14))
+                    .foregroundColor(secondaryTextColor)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(8)
-                    .background(boxColor)
-                    .cornerRadius(8)
             }
-            .padding()
+
+            VStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .fill(Color.white)
+
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .stroke(borderColor.opacity(colorScheme == .dark ? 0.75 : 1), lineWidth: 1)
+
+                    QRCodeImage(data: qrString, size: qrSize)
+                        .accessibilityLabel(Strings.accessibilityLabel)
+                }
+                .padding(18)
+                .frame(maxWidth: .infinity)
+                .background(
+                    RoundedRectangle(cornerRadius: 30, style: .continuous)
+                        .fill(stageColor)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 30, style: .continuous)
+                        .stroke(borderColor, lineWidth: 1)
+                )
+
+                HStack(spacing: 10) {
+                    verificationPillButton(
+                        title: didCopyCode ? "Copied" : "Copy code",
+                        icon: didCopyCode ? "checkmark" : "doc.on.doc",
+                        filled: true,
+                        tint: accentColor
+                    ) {
+                        copyCodeToClipboard()
+                    }
+
+                    verificationPillButton(
+                        title: showDetails ? "Hide details" : "Show details",
+                        icon: showDetails ? "chevron.up" : "chevron.down",
+                        filled: false,
+                        tint: accentColor
+                    ) {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showDetails.toggle()
+                        }
+                    }
+                }
+
+                if showDetails {
+                    ScrollView {
+                        Text(qrString)
+                            .font(.bitchatSystem(size: 11, design: .monospaced))
+                            .foregroundColor(textColor)
+                            .textSelection(.enabled)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxHeight: 140)
+                    .padding(12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .fill(stageColor)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .stroke(borderColor, lineWidth: 1)
+                    )
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            .padding(20)
             .frame(maxWidth: .infinity)
-            .background(boxColor)
-            .cornerRadius(8)
+            .background(
+                RoundedRectangle(cornerRadius: 30, style: .continuous)
+                    .fill(panelColor)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 30, style: .continuous)
+                    .stroke(borderColor, lineWidth: 1)
+            )
+            .shadow(color: shadowColor, radius: 16, x: 0, y: 8)
         }
-        .padding()
+    }
+
+    private func verificationPillButton(
+        title: String,
+        icon: String,
+        filled: Bool,
+        tint: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: icon)
+                .font(.bitchatSystem(size: 13, weight: .semibold))
+                .foregroundColor(filled ? BitchatTheme.primaryText(for: colorScheme) : tint)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(filled ? tint.opacity(colorScheme == .dark ? 0.24 : 0.14) : stageColor)
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(filled ? tint.opacity(colorScheme == .dark ? 0.3 : 0.18) : borderColor, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func copyCodeToClipboard() {
+        #if os(iOS)
+        UIPasteboard.general.string = qrString
+        #else
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(qrString, forType: .string)
+        #endif
+        didCopyCode = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+            didCopyCode = false
+        }
     }
 }
 
@@ -108,11 +228,20 @@ struct ImageWrapper: View {
 /// Placeholder scanner UI; real camera scanning will be added later.
 struct QRScanView: View {
     @EnvironmentObject var viewModel: ChatViewModel
+    @Environment(\.colorScheme) var colorScheme
     var isActive: Bool = true
     var onSuccess: (() -> Void)? = nil  // Called when verification succeeds
     @State private var input = ""
     @State private var result: String = "" // not shown for iOS scanner
     @State private var lastValid: String = ""
+
+    private var panelColor: Color { BitchatTheme.elevatedSurface(for: colorScheme) }
+    private var stageColor: Color { BitchatTheme.secondarySurface(for: colorScheme) }
+    private var borderColor: Color { BitchatTheme.border(for: colorScheme) }
+    private var accentColor: Color { BitchatTheme.accent(for: colorScheme) }
+    private var textColor: Color { BitchatTheme.primaryText(for: colorScheme) }
+    private var secondaryTextColor: Color { BitchatTheme.secondaryText(for: colorScheme) }
+    private var shadowColor: Color { BitchatTheme.shadow(for: colorScheme) }
 
     private enum Strings {
         static let pastePrompt: LocalizedStringKey = "verification.scan.paste_prompt"
@@ -129,33 +258,80 @@ struct QRScanView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            #if os(iOS)
-            CameraScannerView(isActive: isActive) { code in
-                // Deduplicate: ignore if we just processed this exact QR code
-                guard code != lastValid else { return }
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Scan someone's QR")
+                    .font(.bitchatSystem(size: 20, weight: .bold, design: .rounded))
+                    .foregroundColor(textColor)
 
-                if let qr = VerificationService.shared.verifyScannedQR(code) {
-                    let ok = viewModel.beginQRVerification(with: qr)
-                    if ok {
-                        // Successfully initiated verification; remember this QR to prevent re-scanning
-                        lastValid = code
-                        // Close scanner and return to "My QR" view
-                        onSuccess?()
+                Text("Point your camera at their code and verification will start automatically.")
+                    .font(.bitchatSystem(size: 14))
+                    .foregroundColor(secondaryTextColor)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            #if os(iOS)
+            ZStack {
+                CameraScannerView(isActive: isActive) { code in
+                    // Deduplicate: ignore if we just processed this exact QR code
+                    guard code != lastValid else { return }
+
+                    if let qr = VerificationService.shared.verifyScannedQR(code) {
+                        let ok = viewModel.beginQRVerification(with: qr)
+                        if ok {
+                            // Successfully initiated verification; remember this QR to prevent re-scanning
+                            lastValid = code
+                            // Close scanner and return to "My QR" view
+                            onSuccess?()
+                        }
+                        // If !ok, peer not found or already pending - don't set lastValid so user can retry
+                    } else {
+                        // ignore invalid reads; continue scanning
                     }
-                    // If !ok, peer not found or already pending - don't set lastValid so user can retry
-                } else {
-                    // ignore invalid reads; continue scanning
+                }
+                .frame(height: 320)
+                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .stroke(borderColor, lineWidth: 1)
+
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(accentColor.opacity(0.45), style: StrokeStyle(lineWidth: 2, dash: [10, 8]))
+                    .frame(width: 210, height: 210)
+
+                VStack {
+                    Spacer()
+                    Text("Scanning runs automatically")
+                        .font(.bitchatSystem(size: 12, weight: .medium))
+                        .foregroundColor(BitchatTheme.primaryText(for: colorScheme))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(stageColor.opacity(0.94))
+                        )
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .stroke(borderColor, lineWidth: 1)
+                        )
+                        .padding(.bottom, 16)
                 }
             }
-            .frame(height: 260)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
             #else
             Text(Strings.pastePrompt)
-                .font(.bitchatSystem(size: 14, weight: .medium, design: .monospaced))
+                .font(.bitchatSystem(size: 14, weight: .medium))
+                .foregroundColor(secondaryTextColor)
             TextEditor(text: $input)
                 .frame(height: 100)
-                .border(Color.gray.opacity(0.4))
+                .padding(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(stageColor)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(borderColor, lineWidth: 1)
+                )
             Button(Strings.validate) {
                 // Deduplicate: ignore if we just processed this exact QR
                 guard input != lastValid else {
@@ -177,12 +353,30 @@ struct QRScanView: View {
                     result = Strings.invalid
                 }
             }
-            .buttonStyle(.bordered)
+            .font(.bitchatSystem(size: 13, weight: .semibold))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(accentColor.opacity(colorScheme == .dark ? 0.24 : 0.14))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(accentColor.opacity(colorScheme == .dark ? 0.32 : 0.2), lineWidth: 1)
+            )
+            .buttonStyle(.plain)
             #endif
-            // No status text under camera per design
-            Spacer()
         }
-        .padding()
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .fill(panelColor)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .stroke(borderColor, lineWidth: 1)
+        )
+        .shadow(color: shadowColor, radius: 16, x: 0, y: 8)
     }
 }
 
@@ -287,107 +481,185 @@ struct VerificationSheetView: View {
     @State private var showingScanner = false
     @Environment(\.colorScheme) var colorScheme
 
-    private var backgroundColor: Color { colorScheme == .dark ? Color.black : Color.white }
-    private var accentColor: Color { colorScheme == .dark ? Color.green : Color(red: 0, green: 0.5, blue: 0) }
-    private var boxColor: Color { Color.gray.opacity(0.1) }
+    private var backgroundColor: Color { BitchatTheme.appBackground(for: colorScheme) }
+    private var accentColor: Color { BitchatTheme.accent(for: colorScheme) }
+    private var elevatedSurfaceColor: Color { BitchatTheme.elevatedSurface(for: colorScheme) }
+    private var secondarySurfaceColor: Color { BitchatTheme.secondarySurface(for: colorScheme) }
+    private var textColor: Color { BitchatTheme.primaryText(for: colorScheme) }
+    private var secondaryTextColor: Color { BitchatTheme.secondaryText(for: colorScheme) }
+    private var borderColor: Color { BitchatTheme.border(for: colorScheme) }
+    private var shadowColor: Color { BitchatTheme.shadow(for: colorScheme) }
 
     private func myQRString() -> String {
         let npub = try? viewModel.idBridge.getCurrentNostrIdentity()?.npub
         return VerificationService.shared.buildMyQRString(nickname: viewModel.nickname, npub: npub) ?? ""
     }
 
+    private var heroIconName: String {
+        showingScanner ? "camera.viewfinder" : "checkmark.shield"
+    }
+
+    private var heroTitle: String {
+        showingScanner ? "Verify someone nearby" : "Verification"
+    }
+
+    private var heroDescription: String {
+        showingScanner
+            ? "Scan a nearby person's QR code to confirm you are really chatting with them."
+            : "Share your QR code or scan someone else's to verify your conversation."
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            // Top header (always at top)
-            HStack {
-                Text("verification.sheet.title")
-                    .font(.bitchatSystem(size: 14, weight: .bold, design: .monospaced))
-                    .foregroundColor(accentColor)
-                Spacer()
-                Button(action: {
-                    showingScanner = false
-                    isPresented = false
-                }) {
-                    Image(systemName: "xmark")
-                        .font(.bitchatSystem(size: 14, weight: .semibold))
-                        .foregroundColor(accentColor)
+        ScrollView {
+            VStack(spacing: 16) {
+                heroCard
+
+                HStack(spacing: 8) {
+                    verificationModeButton(
+                        title: "My code",
+                        icon: "qrcode",
+                        selected: !showingScanner
+                    ) {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showingScanner = false
+                        }
+                    }
+
+                    verificationModeButton(
+                        title: "Scan",
+                        icon: "camera.viewfinder",
+                        selected: showingScanner
+                    ) {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showingScanner = true
+                        }
+                    }
                 }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
 
-            Divider()
-
-            // Content area
-            Group {
-                if showingScanner {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("verification.scan.prompt_friend")
-                            .font(.bitchatSystem(size: 16, weight: .bold, design: .monospaced))
-                            .frame(maxWidth: .infinity)
-                            .multilineTextAlignment(.center)
-                            .foregroundColor(accentColor)
+                Group {
+                    if showingScanner {
                         #if os(iOS)
                         QRScanView(isActive: showingScanner, onSuccess: {
                             showingScanner = false
                         })
-                            .environmentObject(viewModel)
-                            .frame(height: 280)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .environmentObject(viewModel)
                         #else
                         QRScanView(onSuccess: {
                             showingScanner = false
                         })
-                            .environmentObject(viewModel)
+                        .environmentObject(viewModel)
                         #endif
+                    } else {
+                        MyQRView(qrString: myQRString())
                     }
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(boxColor)
-                    .cornerRadius(8)
-                } else {
-                    let qr = myQRString()
-                    MyQRView(qrString: qr)
-                }
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-
-            // Centered controls moved up
-            VStack(spacing: 10) {
-                if showingScanner {
-                    Button(action: { showingScanner = false }) {
-                        Label("show my qr", systemImage: "qrcode")
-                            .font(.bitchatSystem(size: 13, design: .monospaced))
-                    }
-                    .buttonStyle(.bordered)
-                } else {
-                    Button(action: { showingScanner = true }) {
-                        Label("scan someone else's qr", systemImage: "camera.viewfinder")
-                            .font(.bitchatSystem(size: 13, weight: .medium, design: .monospaced))
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(.gray)
                 }
 
-                // Optional: Remove verification for selected peer (if verified)
                 if let pid = viewModel.selectedPrivateChatPeer,
                    let fp = viewModel.getFingerprint(for: pid),
                    viewModel.verifiedFingerprints.contains(fp) {
                     Button(action: { viewModel.unverifyFingerprint(for: pid) }) {
                         Label("remove verification", systemImage: "minus.circle")
-                            .font(.bitchatSystem(size: 12, design: .monospaced))
+                            .font(.bitchatSystem(size: 12, weight: .semibold))
+                            .foregroundColor(BitchatTheme.danger(for: colorScheme))
+                            .frame(maxWidth: .infinity)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(BitchatTheme.dangerSoft(for: colorScheme))
+                            )
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .stroke(BitchatTheme.danger(for: colorScheme).opacity(0.2), lineWidth: 1)
+                            )
                     }
-                    .buttonStyle(.bordered)
-                    .tint(.gray)
+                    .buttonStyle(.plain)
                 }
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
+            .padding(16)
         }
-        .background(backgroundColor)
+        .background(backgroundColor.ignoresSafeArea())
         .onDisappear { showingScanner = false }
+    }
+
+    private var heroCard: some View {
+        HStack(alignment: .top, spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(accentColor.opacity(colorScheme == .dark ? 0.18 : 0.12))
+                    .frame(width: 58, height: 58)
+
+                Image(systemName: heroIconName)
+                    .font(.bitchatSystem(size: 24, weight: .semibold))
+                    .foregroundColor(accentColor)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(heroTitle)
+                    .font(.bitchatSystem(size: 24, weight: .bold, design: .rounded))
+                    .foregroundColor(textColor)
+                Text(heroDescription)
+                    .font(.bitchatSystem(size: 14))
+                    .foregroundColor(secondaryTextColor)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+
+            Button(action: {
+                showingScanner = false
+                isPresented = false
+            }) {
+                Image(systemName: "xmark")
+                    .font(.bitchatSystem(size: 14, weight: .semibold))
+                    .foregroundColor(textColor)
+                    .frame(width: 38, height: 38)
+                    .background(
+                        Circle()
+                            .fill(secondarySurfaceColor)
+                    )
+                    .overlay(
+                        Circle()
+                            .stroke(borderColor, lineWidth: 1)
+                    )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(String(localized: "common.close", comment: "Accessibility label for close buttons"))
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .fill(elevatedSurfaceColor)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .stroke(borderColor, lineWidth: 1)
+        )
+        .shadow(color: shadowColor, radius: 16, x: 0, y: 8)
+    }
+
+    private func verificationModeButton(
+        title: String,
+        icon: String,
+        selected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: icon)
+                .font(.bitchatSystem(size: 13, weight: .semibold))
+                .foregroundColor(selected ? BitchatTheme.primaryText(for: colorScheme) : accentColor)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(selected ? accentColor.opacity(colorScheme == .dark ? 0.24 : 0.14) : secondarySurfaceColor)
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(selected ? accentColor.opacity(colorScheme == .dark ? 0.32 : 0.2) : borderColor, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
     }
 }

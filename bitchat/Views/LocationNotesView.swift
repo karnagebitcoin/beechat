@@ -19,8 +19,8 @@ struct LocationNotesView: View {
         _manager = StateObject(wrappedValue: LocationNotesManager(geohash: gh))
     }
 
-    private var backgroundColor: Color { colorScheme == .dark ? .black : .white }
-    private var accentGreen: Color { colorScheme == .dark ? .green : Color(red: 0, green: 0.5, blue: 0) }
+    private var backgroundColor: Color { BitchatTheme.appBackground(for: colorScheme) }
+    private var accentColor: Color { BitchatTheme.accent(for: colorScheme) }
     private var maxDraftLines: Int { dynamicTypeSize.isAccessibilitySize ? 5 : 3 }
 
     private enum Strings {
@@ -112,11 +112,11 @@ struct LocationNotesView: View {
             if let building = locationManager.locationNames[.building], !building.isEmpty {
                 Text(building)
                     .font(.bitchatSystem(size: 12, design: .monospaced))
-                    .foregroundColor(accentGreen)
+                    .foregroundColor(accentColor)
             } else if let block = locationManager.locationNames[.block], !block.isEmpty {
                 Text(block)
                     .font(.bitchatSystem(size: 12, design: .monospaced))
-                    .foregroundColor(accentGreen)
+                    .foregroundColor(accentColor)
             }
             Text(Strings.description)
                 .font(.bitchatSystem(size: 12, design: .monospaced))
@@ -247,7 +247,7 @@ struct LocationNotesView: View {
             Button(action: send) {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.bitchatSystem(size: 20))
-                    .foregroundColor(sendButtonEnabled ? accentGreen : .secondary)
+                    .foregroundColor(sendButtonEnabled ? accentColor : .secondary)
             }
             .padding(.top, 2)
             .buttonStyle(.plain)

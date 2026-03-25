@@ -12,6 +12,22 @@ import UIKit
 /// - ChatViewModel must consume delegate callbacks (`didReceivePublicMessage`, `didReceiveNoisePayload`).
 /// - A lightweight `peerSnapshotPublisher` is provided for non-UI services.
 final class BLEService: NSObject {
+    #if os(iOS)
+    private static var canQueryApplicationState: Bool {
+        let bundle = Bundle.main
+        return bundle.bundleIdentifier != nil && bundle.bundleURL.pathExtension == "app"
+    }
+
+    private static func currentApplicationState() -> UIApplication.State? {
+        guard canQueryApplicationState else { return nil }
+        return UIApplication.shared.applicationState
+    }
+
+    private static func currentBackgroundTimeRemaining() -> TimeInterval? {
+        guard canQueryApplicationState else { return nil }
+        return UIApplication.shared.backgroundTimeRemaining
+    }
+    #endif
     
     // MARK: - Constants
     
@@ -21,8 +37,8 @@ final class BLEService: NSObject {
     static let serviceUUID = CBUUID(string: "F47B5E2D-4A9E-4C5A-9B3F-8E1D2C3A4B5C") // mainnet
     #endif
     static let characteristicUUID = CBUUID(string: "A1B2C3D4-E5F6-4A5B-8C9D-0E1F2A3B4C5D")
-    private static let centralRestorationID = "chat.bitchat.ble.central"
-    private static let peripheralRestorationID = "chat.bitchat.ble.peripheral"
+    private static let centralRestorationID = "chat.beechat.ble.central"
+    private static let peripheralRestorationID = "chat.beechat.ble.peripheral"
     
     // Default per-fragment chunk size when link limits are unknown
     private let defaultFragmentSize = TransportConfig.bleDefaultFragmentSize
@@ -269,10 +285,14 @@ final class BLEService: NSObject {
         #if os(iOS)
         // Check initial state on main thread
         if Thread.isMainThread {
-            isAppActive = UIApplication.shared.applicationState == .active
+            if let state = Self.currentApplicationState() {
+                isAppActive = state == .active
+            }
         } else {
             DispatchQueue.main.sync {
-                isAppActive = UIApplication.shared.applicationState == .active
+                if let state = Self.currentApplicationState() {
+                    isAppActive = state == .active
+                }
             }
         }
         
@@ -495,7 +515,7 @@ final class BLEService: NSObject {
     // MARK: Identity
     
     var myPeerID = PeerID(str: "")
-    var myNickname: String = "anon"
+    var myNickname: String = "bee"
     
     func setNickname(_ nickname: String) {
         self.myNickname = nickname
@@ -1144,7 +1164,7 @@ final class BLEService: NSObject {
             }
         } else if let info = peersSnapshot[peerID], info.isConnected {
             accepted = true
-            senderNickname = info.nickname.isEmpty ? "anon" + String(peerID.id.prefix(4)) : info.nickname
+            senderNickname = info.nickname.isEmpty ? "bee" + String(peerID.id.prefix(4)) : info.nickname
             let hasCollision = peersSnapshot.values.contains { $0.isConnected && $0.nickname == info.nickname && $0.peerID != peerID } || (myNickname == info.nickname)
             if hasCollision {
                 senderNickname += "#" + String(peerID.id.prefix(4))
@@ -1158,7 +1178,7 @@ final class BLEService: NSObject {
                     if let social = identityManager.getSocialIdentity(for: candidate.fingerprint) {
                         senderNickname = social.localPetname ?? social.claimedNickname
                     } else {
-                        senderNickname = "anon" + String(peerID.id.prefix(4))
+                        senderNickname = "bee" + String(peerID.id.prefix(4))
                     }
                     break
                 }
@@ -2756,14 +2776,12 @@ extension BLEService {
 
         #if os(iOS)
         var backgroundDescriptor = ""
-        var backgroundSeconds: TimeInterval = 0
-        DispatchQueue.main.sync {
-            backgroundSeconds = UIApplication.shared.backgroundTimeRemaining
-        }
-        if backgroundSeconds == .greatestFiniteMagnitude {
-            backgroundDescriptor = " bgRemaining=∞"
-        } else {
-            backgroundDescriptor = String(format: " bgRemaining=%.1fs", backgroundSeconds)
+        if let backgroundSeconds = DispatchQueue.main.sync(execute: { Self.currentBackgroundTimeRemaining() }) {
+            if backgroundSeconds == .greatestFiniteMagnitude {
+                backgroundDescriptor = " bgRemaining=∞"
+            } else {
+                backgroundDescriptor = String(format: " bgRemaining=%.1fs", backgroundSeconds)
+            }
         }
         let appPhase = isAppActive ? "foreground" : "background"
         #else
@@ -4083,7 +4101,7 @@ extension BLEService {
                         if let social = identityManager.getSocialIdentity(for: candidate.fingerprint) {
                             senderNickname = social.localPetname ?? social.claimedNickname
                         } else {
-                            senderNickname = "anon" + String(peerID.id.prefix(4))
+                            senderNickname = "bee" + String(peerID.id.prefix(4))
                         }
                         break
                     }

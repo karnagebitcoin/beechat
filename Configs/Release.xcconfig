@@ -8,4 +8,10 @@ SWIFT_VERSION = 5.0
 DEVELOPMENT_TEAM = L3N5LHJD5Y
 CODE_SIGN_STYLE = Automatic
 
-PRODUCT_BUNDLE_IDENTIFIER = chat.bitchat
+APP_BUNDLE_IDENTIFIER = chat.beechat.$(DEVELOPMENT_TEAM)
+PRODUCT_BUNDLE_IDENTIFIER = $(APP_BUNDLE_IDENTIFIER)
+APP_GROUP_IDENTIFIER = group.$(APP_BUNDLE_IDENTIFIER)
+MACOS_CODE_SIGN_ENTITLEMENTS = bitchat/bitchat-macOS.entitlements
+
+// Optional include of local configs for machine-specific signing overrides.
+#include? "Local.xcconfig"

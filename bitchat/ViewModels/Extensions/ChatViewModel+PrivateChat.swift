@@ -677,6 +677,14 @@ extension ChatViewModel {
             SecureLogger.warning("⚠️ Could not get peer ID for sender \(message.sender)", category: .session)
             return 
         }
+
+        if receiveSnakeControlMessage(message.content, from: peerID) {
+            return
+        }
+
+        if receivePongControlMessage(message.content, from: peerID) {
+            return
+        }
         
         // Check if this is a favorite/unfavorite notification
         if message.content.hasPrefix("[FAVORITED]") || message.content.hasPrefix("[UNFAVORITED]") {

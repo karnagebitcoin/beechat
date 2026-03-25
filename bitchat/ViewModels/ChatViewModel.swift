@@ -98,6 +98,16 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
 
     typealias GeoOutgoingContext = (channel: GeohashChannel, event: NostrEvent, identity: NostrIdentity, teleported: Bool)
 
+    #if os(iOS)
+    static var isForegroundApplicationActive: Bool {
+        let bundle = Bundle.main
+        guard bundle.bundleIdentifier != nil, bundle.bundleURL.pathExtension == "app" else {
+            return false
+        }
+        return UIApplication.shared.applicationState == .active
+    }
+    #endif
+
     @MainActor
     var canSendMediaInCurrentContext: Bool {
         if let peer = selectedPrivateChatPeer {
@@ -135,6 +145,10 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
     
     @Published var messages: [BitchatMessage] = []
     @Published var currentColorScheme: ColorScheme = .light
+    @Published var pongSessions: [String: PongSession] = [:]
+    @Published var activePongRuntime: PongRuntimeController? = nil
+    @Published var snakeSessions: [String: SnakeSession] = [:]
+    @Published var activeSnakeRuntime: SnakeRuntimeController? = nil
     private let maxMessages = TransportConfig.meshTimelineCap // Maximum messages before oldest are removed
     @Published var isConnected = false
     private var recentlySeenPeers: Set<PeerID> = []
@@ -386,6 +400,8 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
     
     // Track Nostr pubkey mappings for unknown senders
     var nostrKeyMapping: [PeerID: String] = [:]  // senderPeerID -> nostrPubkey
+    var pongInviteMessageIDs: [String: String] = [:]
+    var snakeInviteMessageIDs: [String: String] = [:]
     
     // MARK: - Initialization
 
@@ -605,10 +621,6 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
             }
             .store(in: &cancellables)
         
-        // Request notification permission (guards test environment internally)
-        NotificationService.shared.requestAuthorization()
-        
-        
         // Listen for favorite status changes
         NotificationCenter.default.addObserver(
             self,
@@ -748,11 +760,24 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
     private func loadNickname() {
         if let savedNickname = userDefaults.string(forKey: nicknameKey) {
             // Trim whitespace when loading
-            nickname = savedNickname.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedNickname = savedNickname.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let migratedNickname = migrateLegacyGeneratedNickname(trimmedNickname) {
+                nickname = migratedNickname
+                saveNickname()
+            } else {
+                nickname = trimmedNickname
+            }
         } else {
-            nickname = "anon\(Int.random(in: 1000...9999))"
+            nickname = "bee\(Int.random(in: 1000...9999))"
             saveNickname()
         }
+    }
+
+    private func migrateLegacyGeneratedNickname(_ candidate: String) -> String? {
+        guard candidate.hasPrefix("anon") else { return nil }
+        let suffix = String(candidate.dropFirst(4))
+        guard !suffix.isEmpty, suffix.allSatisfy(\.isNumber) else { return nil }
+        return "bee\(suffix)"
     }
     
     func saveNickname() {
@@ -769,7 +794,7 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
         
         // Check if nickname is empty after trimming
         if trimmed.isEmpty {
-            nickname = "anon\(Int.random(in: 1000...9999))"
+            nickname = "bee\(Int.random(in: 1000...9999))"
         } else {
             nickname = trimmed
         }
@@ -1253,8 +1278,8 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
         if let nick = geoNicknames[pubkeyHex.lowercased()], !nick.isEmpty {
             return nick + "#" + suffix
         }
-        // Otherwise, anonymous with collision-resistant suffix
-        return "anon#\(suffix)"
+        // Otherwise, use the generic bee fallback with a collision-resistant suffix
+        return "bee#\(suffix)"
     }
 
 
@@ -1914,8 +1939,8 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
         verifiedFingerprints.removeAll()
         // Verified fingerprints are cleared when identity data is cleared below
         
-        // Reset nickname to anonymous
-        nickname = "anon\(Int.random(in: 1000...9999))"
+        // Reset nickname to the generic bee fallback
+        nickname = "bee\(Int.random(in: 1000...9999))"
         saveNickname()
         
         // Clear favorites and peer mappings
@@ -2095,7 +2120,7 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
     // MARK: - Message Formatting
     
     @MainActor
-    func formatMessageAsText(_ message: BitchatMessage, colorScheme: ColorScheme) -> AttributedString {
+    func formatMessageAsText(_ message: BitchatMessage, colorScheme: ColorScheme, compactPhone: Bool = false) -> AttributedString {
         // Determine if this message was sent by self (mesh, geo, or DM)
         let isSelf: Bool = {
             if let spid = message.senderPeerID {
@@ -2123,43 +2148,58 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
             if message.sender.hasPrefix(nickname + "#") { return true }
             return false
         }()
-        // Check cache first (key includes dark mode + self flag)
+        let paletteID = BitchatTheme.currentPalette().rawValue
+        let typographyVariant = compactPhone ? "compactPhone" : "regular"
         let isDark = colorScheme == .dark
-        if let cachedText = message.getCachedFormattedText(isDark: isDark, isSelf: isSelf) {
+        if let cachedText = message.getCachedFormattedText(
+            isDark: isDark,
+            isSelf: isSelf,
+            paletteID: paletteID,
+            typographyVariant: typographyVariant
+        ) {
             return cachedText
         }
+        let messageFontSize: CGFloat = compactPhone ? 13 : 14
+        let timestampFontSize: CGFloat = compactPhone ? 9 : 10
+        let systemFontSize: CGFloat = compactPhone ? 11 : 12
         
         // Not cached, format the message
         var result = AttributedString()
-        
-        let baseColor: Color = isSelf ? .orange : peerColor(for: message, isDark: isDark)
+        let senderColor = BitchatTheme.senderName(for: colorScheme, isSelf: isSelf)
+        let contentColor = BitchatTheme.messageText(for: colorScheme)
+        let accentColor = BitchatTheme.accent(for: colorScheme)
+        let secondaryColor = BitchatTheme.secondaryText(for: colorScheme)
         
         if message.sender != "system" {
             // Sender (at the beginning) with light-gray suffix styling if present
             let (baseName, suffix) = message.sender.splitSuffix()
             var senderStyle = AttributeContainer()
             // Use consistent color for all senders
-            senderStyle.foregroundColor = baseColor
+            senderStyle.foregroundColor = senderColor
             // Bold the user's own nickname
             let fontWeight: Font.Weight = isSelf ? .bold : .medium
-            senderStyle.font = .bitchatSystem(size: 14, weight: fontWeight, design: .monospaced)
+            senderStyle.font = .bitchatSystem(size: messageFontSize, weight: fontWeight, design: .monospaced)
             // Make sender clickable: encode senderPeerID into a custom URL
-            if let spid = message.senderPeerID, let url = URL(string: "bitchat://user/\(spid.toPercentEncoded())") {
+            if let spid = message.senderPeerID, let url = URL(string: "\(BitchatApp.primaryURLScheme)://user/\(spid.toPercentEncoded())") {
                 senderStyle.link = url
             }
 
-            // Prefix "<@"
-            result.append(AttributedString("<@").mergingAttributes(senderStyle))
+            var separatorStyle = AttributeContainer()
+            separatorStyle.foregroundColor = senderColor
+            separatorStyle.font = .bitchatSystem(size: messageFontSize, weight: fontWeight, design: .monospaced)
+
+            // Prefix "@"
+            result.append(AttributedString("@").mergingAttributes(separatorStyle))
             // Base name
             result.append(AttributedString(baseName).mergingAttributes(senderStyle))
             // Optional suffix in lighter variant of the base color (green or orange for self)
             if !suffix.isEmpty {
                 var suffixStyle = senderStyle
-                suffixStyle.foregroundColor = baseColor.opacity(0.6)
+                suffixStyle.foregroundColor = senderColor.opacity(0.6)
                 result.append(AttributedString(suffix).mergingAttributes(suffixStyle))
             }
-            // Suffix "> "
-            result.append(AttributedString("> ").mergingAttributes(senderStyle))
+            // Suffix ": "
+            result.append(AttributedString(": ").mergingAttributes(separatorStyle))
             
             // Process content with hashtags and mentions
             let content = message.content
@@ -2175,10 +2215,10 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
             }()
             if (content.count > 4000 || content.hasVeryLongToken(threshold: 1024)) && !containsCashuEarly {
                 var plainStyle = AttributeContainer()
-                plainStyle.foregroundColor = baseColor
+                plainStyle.foregroundColor = contentColor
                 plainStyle.font = isSelf
-                    ? .bitchatSystem(size: 14, weight: .bold, design: .monospaced)
-                    : .bitchatSystem(size: 14, design: .monospaced)
+                    ? .bitchatSystem(size: messageFontSize, weight: .bold, design: .monospaced)
+                    : .bitchatSystem(size: messageFontSize, design: .monospaced)
                 result.append(AttributedString(content).mergingAttributes(plainStyle))
             } else {
             // Reuse compiled regexes and detector from MessageFormattingEngine
@@ -2272,10 +2312,10 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
                         let beforeText = String(content[lastEnd..<nsRange.lowerBound])
                         if !beforeText.isEmpty {
                             var beforeStyle = AttributeContainer()
-                            beforeStyle.foregroundColor = baseColor
+                            beforeStyle.foregroundColor = contentColor
                             beforeStyle.font = isSelf
-                                ? .bitchatSystem(size: 14, weight: .bold, design: .monospaced)
-                                : .bitchatSystem(size: 14, design: .monospaced)
+                                ? .bitchatSystem(size: messageFontSize, weight: .bold, design: .monospaced)
+                                : .bitchatSystem(size: messageFontSize, design: .monospaced)
                             if isMentioned {
                                 beforeStyle.font = beforeStyle.font?.bold()
                             }
@@ -2305,8 +2345,8 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
                             return false
                         }()
                         var mentionStyle = AttributeContainer()
-                        mentionStyle.font = .bitchatSystem(size: 14, weight: isSelf ? .bold : .semibold, design: .monospaced)
-                        let mentionColor: Color = isMentionToMe ? .orange : baseColor
+                        mentionStyle.font = .bitchatSystem(size: messageFontSize, weight: isSelf ? .bold : .semibold, design: .monospaced)
+                        let mentionColor: Color = isMentionToMe ? accentColor : contentColor
                         mentionStyle.foregroundColor = mentionColor
                         // Emit '@' (non-localizable symbol - use interpolation to avoid extraction)
                         let at = "@"
@@ -2322,7 +2362,7 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
                     } else {
                         // Style non-mention matches
                         if type == "hashtag" {
-                            // If the hashtag is a valid geohash, make it tappable (bitchat://geohash/<gh>)
+                            // If the hashtag is a valid geohash, make it tappable (beechat://geohash/<gh>)
                             let token = String(matchText.dropFirst()).lowercased()
                             let allowed = Set("0123456789bcdefghjkmnpqrstuvwxyz")
                             let isGeohash = (2...12).contains(token.count) && token.allSatisfy { allowed.contains($0) }
@@ -2350,10 +2390,10 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
                             }()
                             var tagStyle = AttributeContainer()
                             tagStyle.font = isSelf
-                                ? .bitchatSystem(size: 14, weight: .bold, design: .monospaced)
-                                : .bitchatSystem(size: 14, design: .monospaced)
-                            tagStyle.foregroundColor = baseColor
-                            if isGeohash && !attachedToMention && standalone, let url = URL(string: "bitchat://geohash/\(token)") {
+                                ? .bitchatSystem(size: messageFontSize, weight: .bold, design: .monospaced)
+                                : .bitchatSystem(size: messageFontSize, design: .monospaced)
+                            tagStyle.foregroundColor = accentColor
+                            if isGeohash && !attachedToMention && standalone, let url = URL(string: "\(BitchatApp.primaryURLScheme)://geohash/\(token)") {
                                 tagStyle.link = url
                                 tagStyle.underlineStyle = .single
                             }
@@ -2362,29 +2402,31 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
                             // Skip inline token; a styled chip is rendered below the message
                             // We insert a single space to avoid words sticking together
                             var spacer = AttributeContainer()
-                            spacer.foregroundColor = baseColor
+                            spacer.foregroundColor = contentColor
                             spacer.font = isSelf
-                                ? .bitchatSystem(size: 14, weight: .bold, design: .monospaced)
-                                : .bitchatSystem(size: 14, design: .monospaced)
+                                ? .bitchatSystem(size: messageFontSize, weight: .bold, design: .monospaced)
+                                : .bitchatSystem(size: messageFontSize, design: .monospaced)
                             result.append(AttributedString(" ").mergingAttributes(spacer))
                         } else if type == "lightning" || type == "bolt11" || type == "lnurl" {
                             // Skip inline invoice/link; a styled chip is rendered below the message
                             var spacer = AttributeContainer()
-                            spacer.foregroundColor = baseColor
+                            spacer.foregroundColor = contentColor
                             spacer.font = isSelf
-                                ? .bitchatSystem(size: 14, weight: .bold, design: .monospaced)
-                                : .bitchatSystem(size: 14, design: .monospaced)
+                                ? .bitchatSystem(size: messageFontSize, weight: .bold, design: .monospaced)
+                                : .bitchatSystem(size: messageFontSize, design: .monospaced)
                             result.append(AttributedString(" ").mergingAttributes(spacer))
                         } else {
                             // Keep URL styling and make it tappable via .link attribute
                             var matchStyle = AttributeContainer()
-                            matchStyle.font = .bitchatSystem(size: 14, weight: isSelf ? .bold : .semibold, design: .monospaced)
+                            matchStyle.font = .bitchatSystem(size: messageFontSize, weight: isSelf ? .bold : .semibold, design: .monospaced)
                             if type == "url" {
-                                matchStyle.foregroundColor = isSelf ? .orange : .blue
+                                matchStyle.foregroundColor = accentColor
                                 matchStyle.underlineStyle = .single
                                 if let url = URL(string: matchText) {
                                     matchStyle.link = url
                                 }
+                            } else {
+                                matchStyle.foregroundColor = contentColor
                             }
                             result.append(AttributedString(matchText).mergingAttributes(matchStyle))
                         }
@@ -2400,10 +2442,10 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
             if lastEnd < content.endIndex {
                 let remainingText = String(content[lastEnd...])
                 var remainingStyle = AttributeContainer()
-                remainingStyle.foregroundColor = baseColor
+                remainingStyle.foregroundColor = contentColor
                 remainingStyle.font = isSelf
-                    ? .bitchatSystem(size: 14, weight: .bold, design: .monospaced)
-                    : .bitchatSystem(size: 14, design: .monospaced)
+                    ? .bitchatSystem(size: messageFontSize, weight: .bold, design: .monospaced)
+                    : .bitchatSystem(size: messageFontSize, design: .monospaced)
                 if isMentioned {
                     remainingStyle.font = remainingStyle.font?.bold()
                 }
@@ -2414,33 +2456,39 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
             // Add timestamp at the end (smaller, light grey)
             let timestamp = AttributedString(" [\(message.formattedTimestamp)]")
             var timestampStyle = AttributeContainer()
-            timestampStyle.foregroundColor = Color.gray.opacity(0.7)
-            timestampStyle.font = .bitchatSystem(size: 10, design: .monospaced)
+            timestampStyle.foregroundColor = secondaryColor.opacity(0.8)
+            timestampStyle.font = .bitchatSystem(size: timestampFontSize, design: .monospaced)
             result.append(timestamp.mergingAttributes(timestampStyle))
         } else {
             // System message
             var contentStyle = AttributeContainer()
-            contentStyle.foregroundColor = Color.gray
+            contentStyle.foregroundColor = secondaryColor
             let content = AttributedString("* \(message.content) *")
-            contentStyle.font = .bitchatSystem(size: 12, design: .monospaced).italic()
+            contentStyle.font = .bitchatSystem(size: systemFontSize, design: .monospaced).italic()
             result.append(content.mergingAttributes(contentStyle))
             
             // Add timestamp at the end for system messages too
             let timestamp = AttributedString(" [\(message.formattedTimestamp)]")
             var timestampStyle = AttributeContainer()
-            timestampStyle.foregroundColor = Color.gray.opacity(0.5)
-            timestampStyle.font = .bitchatSystem(size: 10, design: .monospaced)
+            timestampStyle.foregroundColor = secondaryColor.opacity(0.7)
+            timestampStyle.font = .bitchatSystem(size: timestampFontSize, design: .monospaced)
             result.append(timestamp.mergingAttributes(timestampStyle))
         }
         
         // Cache the formatted text
-        message.setCachedFormattedText(result, isDark: isDark, isSelf: isSelf)
+        message.setCachedFormattedText(
+            result,
+            isDark: isDark,
+            isSelf: isSelf,
+            paletteID: paletteID,
+            typographyVariant: typographyVariant
+        )
         
         return result
     }
 
     @MainActor
-    func formatMessageHeader(_ message: BitchatMessage, colorScheme: ColorScheme) -> AttributedString {
+    func formatMessageHeader(_ message: BitchatMessage, colorScheme: ColorScheme, compactPhone: Bool = false) -> AttributedString {
         let isSelf: Bool = {
             if let spid = message.senderPeerID {
                 if case .location(let ch) = activeChannel, spid.id.hasPrefix("nostr:") {
@@ -2454,14 +2502,13 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
             if message.sender.hasPrefix(nickname + "#") { return true }
             return false
         }()
-
-        let isDark = colorScheme == .dark
-        let baseColor: Color = isSelf ? .orange : peerColor(for: message, isDark: isDark)
+        let baseColor: Color = BitchatTheme.senderName(for: colorScheme, isSelf: isSelf)
+        let headerFontSize: CGFloat = compactPhone ? 13 : 14
 
         if message.sender == "system" {
             var style = AttributeContainer()
             style.foregroundColor = baseColor
-            style.font = .bitchatSystem(size: 14, weight: .medium, design: .monospaced)
+            style.font = .bitchatSystem(size: headerFontSize, weight: .medium, design: .monospaced)
             return AttributedString(message.sender).mergingAttributes(style)
         }
 
@@ -2469,20 +2516,24 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
         let (baseName, suffix) = message.sender.splitSuffix()
         var senderStyle = AttributeContainer()
         senderStyle.foregroundColor = baseColor
-        senderStyle.font = .bitchatSystem(size: 14, weight: isSelf ? .bold : .medium, design: .monospaced)
+        senderStyle.font = .bitchatSystem(size: headerFontSize, weight: isSelf ? .bold : .medium, design: .monospaced)
         if let spid = message.senderPeerID,
-           let url = URL(string: "bitchat://user/\(spid.id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? spid.id)") {
+           let url = URL(string: "\(BitchatApp.primaryURLScheme)://user/\(spid.id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? spid.id)") {
             senderStyle.link = url
         }
 
-        result.append(AttributedString("<@").mergingAttributes(senderStyle))
+        var separatorStyle = AttributeContainer()
+        separatorStyle.foregroundColor = baseColor
+        separatorStyle.font = .bitchatSystem(size: headerFontSize, weight: isSelf ? .bold : .medium, design: .monospaced)
+
+        result.append(AttributedString("@").mergingAttributes(separatorStyle))
         result.append(AttributedString(baseName).mergingAttributes(senderStyle))
         if !suffix.isEmpty {
             var suffixStyle = senderStyle
             suffixStyle.foregroundColor = baseColor.opacity(0.6)
             result.append(AttributedString(suffix).mergingAttributes(suffixStyle))
         }
-        result.append(AttributedString("> ").mergingAttributes(senderStyle))
+        result.append(AttributedString(": ").mergingAttributes(separatorStyle))
         return result
     }
 
@@ -2599,19 +2650,8 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
 
     @MainActor
     private func peerColor(for message: BitchatMessage, isDark: Bool) -> Color {
-        if let spid = message.senderPeerID {
-            if spid.isGeoChat || spid.isGeoDM {
-                let full = nostrKeyMapping[spid]?.lowercased() ?? spid.bare.lowercased()
-                return getNostrPaletteColor(for: full, isDark: isDark)
-            } else if spid.id.count == 16 {
-                // Mesh short ID
-                return getPeerPaletteColor(for: spid, isDark: isDark)
-            } else {
-                return getPeerPaletteColor(for: PeerID(str: spid.id.lowercased()), isDark: isDark)
-            }
-        }
-        // Fallback when we only have a display name
-        return Color(peerSeed: message.sender.lowercased(), isDark: isDark)
+        let scheme: ColorScheme = isDark ? .dark : .light
+        return BitchatTheme.senderName(for: scheme, isSelf: isSelfMessage(message))
     }
 
     // MARK: - MessageFormattingContext Protocol
@@ -2651,18 +2691,25 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
 
     @MainActor
     func peerURL(for peerID: PeerID) -> URL? {
-        return URL(string: "bitchat://user/\(peerID.toPercentEncoded())")
+        return URL(string: "\(BitchatApp.primaryURLScheme)://user/\(peerID.toPercentEncoded())")
     }
 
     // Public helpers for views to color peers consistently in lists
     @MainActor
     func colorForNostrPubkey(_ pubkeyHexLowercased: String, isDark: Bool) -> Color {
-        return getNostrPaletteColor(for: pubkeyHexLowercased.lowercased(), isDark: isDark)
+        let scheme: ColorScheme = isDark ? .dark : .light
+        if let myHex = currentGeohashIdentityHex(), pubkeyHexLowercased.lowercased() == myHex {
+            return BitchatTheme.accent(for: scheme)
+        }
+        return BitchatTheme.primaryText(for: scheme)
     }
 
     @MainActor
     func colorForMeshPeer(id peerID: PeerID, isDark: Bool) -> Color {
-        return getPeerPaletteColor(for: peerID, isDark: isDark)
+        let scheme: ColorScheme = isDark ? .dark : .light
+        return peerID == meshService.myPeerID
+            ? BitchatTheme.accent(for: scheme)
+            : BitchatTheme.primaryText(for: scheme)
     }
 
     // MARK: - Peer Palette Coordination
@@ -2680,7 +2727,7 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
     @MainActor
     private func getPeerPaletteColor(for peerID: PeerID, isDark: Bool) -> Color {
         if peerID == meshService.myPeerID {
-            return .orange
+            return BitchatTheme.accent(for: isDark ? .dark : .light)
         }
 
         meshPalette.ensurePalette(for: currentMeshPaletteSeeds())
@@ -2704,7 +2751,7 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
     private func getNostrPaletteColor(for pubkeyHexLowercased: String, isDark: Bool) -> Color {
         let myHex = currentGeohashIdentityHex()
         if let myHex, pubkeyHexLowercased == myHex {
-            return .orange
+            return BitchatTheme.accent(for: isDark ? .dark : .light)
         }
 
         nostrPalette.ensurePalette(for: currentNostrPaletteSeeds(excluding: myHex))
@@ -2855,16 +2902,16 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
             }
         }
         
-        // Use anonymous with shortened peer ID
+        // Use the generic bee fallback with a shortened peer ID
         // Ensure we have at least 4 characters for the prefix
         let prefixLength = min(4, peerID.id.count)
         let prefix = String(peerID.id.prefix(prefixLength))
         
-        // Avoid "anonanon" by checking if ID already starts with "anon"
-        if prefix.starts(with: "anon") {
+        // Avoid "beebee" by checking if the ID already starts with "bee"
+        if prefix.starts(with: "bee") {
             return "peer\(prefix)"
         }
-        return "anon\(prefix)"
+        return "bee\(prefix)"
     }
     
     func getMyFingerprint() -> String {
@@ -3176,6 +3223,12 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
     func didReceivePublicMessage(from peerID: PeerID, nickname: String, content: String, timestamp: Date, messageID: String?) {
         Task { @MainActor in
             let normalized = content.trimmingCharacters(in: .whitespacesAndNewlines)
+            if receiveSnakePublicContent(normalized, from: peerID, nickname: nickname, timestamp: timestamp) {
+                return
+            }
+            if receivePongPublicContent(normalized, from: peerID, nickname: nickname, timestamp: timestamp) {
+                return
+            }
             let publicMentions = parseMentions(from: normalized)
             let msg = BitchatMessage(
                 id: messageID,
@@ -3338,7 +3391,7 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
             // Clean up stale unread peer IDs whenever peer list updates
             self.cleanupStaleUnreadPeerIDs()
             
-            // Smart notification logic for "bitchatters nearby"
+            // Smart notification logic for nearby-people notifications
             let meshPeers = peers.filter { peerID in
                 self.meshService.isPeerConnected(peerID) || self.meshService.isPeerReachable(peerID)
             }
@@ -3363,7 +3416,7 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
                         self.lastNetworkNotificationTime = Date()
                         NotificationService.shared.sendNetworkAvailableNotification(peerCount: meshPeers.count)
                         SecureLogger.info(
-                            "👥 Sent bitchatters nearby notification for \(meshPeers.count) mesh peers (new: \(newPeers.count))",
+                            "👥 Sent nearby-people notification for \(meshPeers.count) mesh peers (new: \(newPeers.count))",
                             category: .session
                         )
                     }
@@ -3811,7 +3864,7 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
 
     /// Send haptic feedback for special messages (iOS only)
     func sendHapticFeedback(for message: BitchatMessage) {        #if os(iOS)
-        guard UIApplication.shared.applicationState == .active else { return }
+        guard Self.isForegroundApplicationActive else { return }
         
         // Build acceptable target tokens: base nickname and, if in a location channel, nickname with '#abcd'
         var tokens: [String] = [nickname]

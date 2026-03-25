@@ -112,7 +112,7 @@ final class MessageFormattingEngine {
         }
 
         var result = AttributedString()
-        let baseColor: Color = isSelf ? .orange : context.senderColor(for: message, isDark: isDark)
+        let baseColor: Color = context.senderColor(for: message, isDark: isDark)
 
         // Format system messages differently
         if message.sender == "system" {
@@ -154,7 +154,7 @@ final class MessageFormattingEngine {
     ) -> AttributedString {
         let isDark = colorScheme == .dark
         let isSelf = context.isSelfMessage(message)
-        let baseColor: Color = isSelf ? .orange : context.senderColor(for: message, isDark: isDark)
+        let baseColor: Color = context.senderColor(for: message, isDark: isDark)
 
         if message.sender == "system" {
             var style = AttributeContainer()
@@ -233,8 +233,12 @@ final class MessageFormattingEngine {
             senderStyle.link = url
         }
 
-        // Build: "<@baseName#suffix> "
-        result.append(AttributedString("<@").mergingAttributes(senderStyle))
+        var separatorStyle = AttributeContainer()
+        separatorStyle.foregroundColor = baseColor
+        separatorStyle.font = .bitchatSystem(size: 14, weight: fontWeight, design: .monospaced)
+
+        // Build: "@baseName#suffix: "
+        result.append(AttributedString("@").mergingAttributes(separatorStyle))
         result.append(AttributedString(baseName).mergingAttributes(senderStyle))
 
         if !suffix.isEmpty {
@@ -243,7 +247,7 @@ final class MessageFormattingEngine {
             result.append(AttributedString(suffix).mergingAttributes(suffixStyle))
         }
 
-        result.append(AttributedString("> ").mergingAttributes(senderStyle))
+        result.append(AttributedString(": ").mergingAttributes(separatorStyle))
 
         return result
     }
@@ -423,24 +427,24 @@ final class MessageFormattingEngine {
             var result = AttributedString()
 
             var mentionStyle = AttributeContainer()
-            mentionStyle.foregroundColor = .blue
+            mentionStyle.foregroundColor = baseColor
             mentionStyle.font = .bitchatSystem(size: 14, weight: .semibold, design: .monospaced)
             result.append(AttributedString(baseName).mergingAttributes(mentionStyle))
 
             if !suffix.isEmpty {
                 var suffixStyle = mentionStyle
-                suffixStyle.foregroundColor = Color.gray.opacity(0.7)
+                suffixStyle.foregroundColor = baseColor.opacity(0.6)
                 result.append(AttributedString(suffix).mergingAttributes(suffixStyle))
             }
 
             return result
 
         case .hashtag:
-            style.foregroundColor = .purple
+            style.foregroundColor = baseColor
             style.font = .bitchatSystem(size: 14, weight: .medium, design: .monospaced)
 
         case .url:
-            style.foregroundColor = .blue
+            style.foregroundColor = baseColor
             style.font = .bitchatSystem(size: 14, design: .monospaced)
             style.underlineStyle = .single
             if let url = URL(string: text) {
